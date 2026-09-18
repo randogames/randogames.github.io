@@ -7,15 +7,44 @@
     <style>
       html, body { margin: 0; height: 100%; overflow: hidden; background: #0b2a4a; }
       canvas { display: block; }
+      #hud, #hud * { user-select: none; pointer-events: none; }
       #hud {
-        position: fixed; top: 12px; left: 12px; color: #fff;
-        font: 14px/1.4 system-ui, sans-serif; text-shadow: 0 1px 2px #000;
-        user-select: none; pointer-events: none;
+        position: fixed; inset: 0; color: #fff;
+        font: 15px/1.4 system-ui, sans-serif; text-shadow: 0 1px 2px #000;
       }
+      #top-left { position: absolute; top: 12px; left: 12px; width: 240px; }
+      .bar { height: 12px; background: rgba(0,0,0,.45); border-radius: 6px; overflow: hidden; margin: 4px 0 8px; }
+      .bar > div { height: 100%; width: 100%; transition: width .15s; }
+      #hp-bar { background: #66bb6a; }
+      #swim { display: none; }
+      #stats { font-weight: 600; margin-bottom: 4px; }
+      #hint { opacity: .9; }
+      #compass { position: absolute; top: 12px; right: 16px; text-align: center; }
+      #compass-arrow { font-size: 34px; line-height: 1; display: inline-block; transition: transform .1s linear; }
+      #controls { position: absolute; bottom: 12px; left: 12px; opacity: .8; font-size: 13px; }
+      #messages { position: absolute; top: 20%; left: 0; right: 0; text-align: center; }
+      .msg { font-size: 20px; font-weight: 600; margin: 4px 0; transition: opacity 1s; }
+      .msg.fade { opacity: 0; }
+      #overlay {
+        position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center;
+        background: rgba(0,0,0,.65); color: #fff; font: 20px system-ui, sans-serif; text-align: center;
+      }
+      #overlay h1 { font-size: 48px; margin: 0 0 12px; }
     </style>
   </head>
   <body>
-    <div id="hud">Island Escape<br />WASD / arrows to walk</div>
+    <div id="hud">
+      <div id="top-left">
+        <div id="stats">Day 1   Wood: 0</div>
+        <div id="hp">Health<div class="bar"><div id="hp-bar"></div></div></div>
+        <div id="swim">Breath<div class="bar"><div id="swim-bar"></div></div></div>
+        <div id="hint"></div>
+      </div>
+      <div id="compass"><div id="compass-arrow">&#x2B06;</div><div id="compass-text"></div></div>
+      <div id="controls">WASD move &middot; Shift sneak &middot; Space jump &middot; E / Tab hit &middot; B boat &middot; Scroll zoom</div>
+      <div id="messages"></div>
+    </div>
+    <div id="overlay"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
