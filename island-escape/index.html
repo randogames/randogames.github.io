@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Island Escape</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #0b2a4a; }
+      canvas { display: block; }
+      #hud, #hud * { user-select: none; pointer-events: none; }
+      #hud {
+        position: fixed; inset: 0; color: #fff;
+        font: 15px/1.4 system-ui, sans-serif; text-shadow: 0 1px 2px #000;
+      }
+      #top-left { position: absolute; top: 12px; left: 12px; width: 260px; }
+      .label { display: flex; justify-content: space-between; }
+      .bar { height: 12px; background: rgba(0,0,0,.45); border-radius: 6px; overflow: hidden; margin: 3px 0 8px; }
+      .bar > div { height: 100%; width: 100%; transition: width .15s; }
+      #hp-bar { background: #66bb6a; }
+      #hunger-bar { background: #c98a2b; }
+      #swim { display: none; }
+      #stats { font-weight: 600; margin-bottom: 4px; }
+      #items { white-space: pre-line; margin-bottom: 6px; }
+      #hint { opacity: .9; }
+      #compass { position: absolute; top: 12px; right: 16px; text-align: center; }
+      #compass-arrow { font-size: 34px; line-height: 1; display: inline-block; transition: transform .1s linear; }
+      #controls { position: absolute; bottom: 12px; left: 12px; opacity: .8; font-size: 13px; }
+      #messages { position: absolute; top: 20%; left: 0; right: 0; text-align: center; }
+      .msg { font-size: 20px; font-weight: 600; margin: 4px 0; transition: opacity 1s; }
+      .msg.fade { opacity: 0; }
+      #crafting {
+        display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        width: 420px; max-height: 85vh; overflow: auto; padding: 16px 20px; box-sizing: border-box;
+        background: rgba(20, 24, 30, .92); color: #fff; border-radius: 12px;
+        font: 15px/1.35 system-ui, sans-serif; user-select: none;
+      }
+      #crafting h2 { margin: 0 0 4px; }
+      #crafting p { margin: 0 0 10px; opacity: .8; }
+      .recipe { padding: 6px 8px; border-radius: 6px; margin-bottom: 4px; }
+      .recipe.ok { background: rgba(102, 187, 106, .25); }
+      .recipe.no { opacity: .55; }
+      .recipe .cost { opacity: .8; font-size: 13px; margin-left: 6px; }
+      #hotbar {
+        position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
+        display: flex; gap: 6px;
+      }
+      .slot {
+        width: 92px; padding: 8px 6px 6px; box-sizing: border-box; text-align: center; font-size: 12px; line-height: 1.2;
+        background: rgba(0,0,0,.5); border: 2px solid rgba(255,255,255,.25); border-radius: 8px; opacity: .45; position: relative;
+      }
+      .slot.owned { opacity: 1; }
+      .slot.selected { border-color: #ffd54f; background: rgba(255, 213, 79, .25); }
+      .slot .key { position: absolute; top: 2px; left: 6px; font-size: 11px; opacity: .8; }
+      #home { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); color: #fff; opacity: .6; text-decoration: none; font: 13px system-ui, sans-serif; text-shadow: 0 1px 2px #000; }
+      #home:hover { opacity: 1; }
+      #overlay {
+        position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center;
+        background: rgba(0,0,0,.65); color: #fff; font: 20px system-ui, sans-serif; text-align: center;
+      }
+      #overlay h1 { font-size: 48px; margin: 0 0 12px; }
+    </style>
+  </head>
+  <body>
+    <a id="home" href="/">&larr; All games</a>
+    <div id="hud">
+      <div id="top-left">
+        <div id="stats">Day 1</div>
+        <div class="label"><span>Health</span><span id="hp-text"></span></div>
+        <div class="bar"><div id="hp-bar"></div></div>
+        <div class="label"><span>Hunger</span><span id="hunger-text"></span></div>
+        <div class="bar"><div id="hunger-bar"></div></div>
+        <div id="swim">Breath<div class="bar"><div id="swim-bar"></div></div></div>
+        <div id="items"></div>
+        <div id="hint"></div>
+      </div>
+      <div id="compass"><div id="compass-arrow">&#x2B06;</div><div id="compass-text"></div></div>
+      <div id="controls">WASD move &middot; Shift sneak &middot; Space jump &middot; E / Tab hit &middot; C craft &middot; 1-4 hold tool &middot; Q eat &middot; B boat &middot; Scroll zoom</div>
+      <div id="messages"></div>
+      <div id="hotbar"></div>
+    </div>
+    <div id="crafting"></div>
+    <div id="overlay"></div>
+    <script type="module" src="/src/island-escape/main.ts"></script>
+  </body>
+</html>

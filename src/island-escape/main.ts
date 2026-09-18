@@ -15,6 +15,9 @@ import { createInventory } from './inventory';
 import { CraftingMenu, RECIPES, blocker, payFor, type Recipe } from './crafting';
 import { placeTable, placeCampfire, updateCampfires, anyNear, type Campfire } from './structures';
 import { HOTBAR, TOOL_NAMES } from './tools';
+import { installUpdateBanner } from '../shared/update-banner';
+
+installUpdateBanner();
 
 const HIT_RANGE = 2.8;
 const BOARD_RANGE = 4.5;
