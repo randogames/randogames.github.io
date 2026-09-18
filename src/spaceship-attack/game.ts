@@ -276,22 +276,12 @@ function fire(g: GameState, notify: Notify): void {
   g.fireCooldown = g.loadout.fireDelay;
   g.loadout.ammo -= 1;
   g.shotsFired += 1;
-  const offsets = g.loadout.guns === 1 ? [0] : g.loadout.guns === 2 ? [-9, 9] : [-13, 0, 13];
-  const spread = (g.loadout.spread * Math.PI) / 180;
+  // Extra cannons fire straight up in close parallel lines, never fanned out.
+  const offsets = g.loadout.guns === 1 ? [0] : g.loadout.guns === 2 ? [-4, 4] : [-7, 0, 7];
   const damage = g.loadout.damage + skinFor(g.bossesDefeated).damageBonus;
-  offsets.forEach((dx, i) => {
-    // Fan the volley out from the centre when the spread upgrade is earned.
-    const centred = offsets.length === 1 ? 0 : i / (offsets.length - 1) - 0.5;
-    const angle = centred * spread * 2;
-    g.bullets.push({
-      x: g.x + dx,
-      y: g.y - 18,
-      vx: Math.sin(angle) * BULLET_SPEED,
-      vy: -Math.cos(angle) * BULLET_SPEED,
-      damage,
-      hostile: false,
-    });
-  });
+  for (const dx of offsets) {
+    g.bullets.push({ x: g.x + dx, y: g.y - 18, vx: 0, vy: -BULLET_SPEED, damage, hostile: false });
+  }
   const per = g.mode.shotsPerUpgrade;
   if (per !== null && g.shotsFired % per === 0) grantUpgrade(g, notify);
 }

@@ -5,8 +5,6 @@ export interface Loadout {
   fireDelay: number;
   /** Damage per bullet. */
   damage: number;
-  /** Sideways spread of multi-shot volleys, in degrees. */
-  spread: number;
   ammo: number;
   maxAmmo: number;
 }
@@ -25,9 +23,9 @@ export const UPGRADES: readonly Upgrade[] = [
   { name: 'Twin cannons', apply: (l) => { l.guns = 2; } },
   { name: 'Heavier rounds', apply: (l) => { l.damage += 1; } },
   { name: 'Bigger magazine', apply: (l) => { l.maxAmmo += 40; l.ammo += 40; } },
-  { name: 'Triple cannons', apply: (l) => { l.guns = 3; l.spread = 7; } },
+  { name: 'Triple cannons', apply: (l) => { l.guns = 3; } },
   { name: 'Heavier rounds II', apply: (l) => { l.damage += 2; } },
-  { name: 'Wider volley', apply: (l) => { l.spread += 6; } },
+  { name: 'Reinforced rounds', apply: (l) => { l.damage += 2; } },
   { name: 'Bigger magazine II', apply: (l) => { l.maxAmmo += 60; l.ammo += 60; } },
   { name: 'Heavier rounds III', apply: (l) => { l.damage += 3; } },
 ];
@@ -35,7 +33,7 @@ export const UPGRADES: readonly Upgrade[] = [
 export const AMMO_PER_KILL = 14;
 
 export function createLoadout(startAmmo: number, maxAmmo: number): Loadout {
-  return { guns: 1, fireDelay: 0.16, damage: 1, spread: 0, ammo: startAmmo, maxAmmo };
+  return { guns: 1, fireDelay: 0.16, damage: 1, ammo: startAmmo, maxAmmo };
 }
 
 export function upgradeFor(upgradeCount: number): Upgrade {

@@ -79,5 +79,6 @@ if (import.meta.env.DEV) {
     // Advance one fixed step, for scripted tests.
     __step: () => update(game, 1 / 60, input, notify),
     __skin: () => currentSkin(game).name,
+    __fire: () => { input.forceFire(); update(game, 1 / 60, input, notify); input.endFrame(); },
   });
 }

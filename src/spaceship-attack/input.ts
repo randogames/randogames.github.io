@@ -51,6 +51,11 @@ export class Input {
     return codes.some((c) => this.pressed.has(c));
   }
 
+  /** Test helper: pretend Space was pressed this frame. */
+  forceFire(): void {
+    this.pressed.add('Space');
+  }
+
   endFrame(): void {
     this.pressed.clear();
   }
