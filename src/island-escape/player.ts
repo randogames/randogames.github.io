@@ -4,6 +4,7 @@ import type { World } from './world';
 import type { Boat } from './boat';
 import { buildHuman, poseHuman, type Human } from './human';
 import { buildTool, type ToolKind } from './tools';
+import type { Mode } from './modes';
 
 const WALK_SPEED = 8;
 const SNEAK_SPEED = 3;
@@ -19,6 +20,7 @@ const HUNGER_IDLE = 0.12; // per second
 const HUNGER_WALK = 0.55;
 const HUNGER_SWIM = 1.1;
 const STARVE_DAMAGE = 3; // hp per second at zero hunger
+const FLY_SPEED = 12; // creative mode, holding Space
 const REGEN_HUNGER = 80; // hunger needed before health regenerates
 const REGEN_RATE = 4; // hp per second at full hunger
 
@@ -36,9 +38,15 @@ export class Player {
   private grounded = true;
   private swing = 0;
   private walk = 0;
+  private flying = false;
   private toolMesh: THREE.Group | null = null;
 
-  constructor(scene: THREE.Scene, private readonly world: World, private readonly notify: Notify) {
+  constructor(
+    scene: THREE.Scene,
+    private readonly world: World,
+    private readonly notify: Notify,
+    private readonly mode: Mode,
+  ) {
     this.human = buildHuman({ shirt: 0x2f80c2, pants: 0x3b3b5c, hair: 0x4a2e1a });
     this.group = this.human.group;
     scene.add(this.group);
@@ -70,6 +78,7 @@ export class Player {
   }
 
   damage(amount: number, cause = 'The pirates got you.'): void {
+    if (this.mode.invulnerable) return;
     this.hp -= amount;
     if (this.hp <= 0) {
       this.notify(`${cause} You wake up on your home island.`);
@@ -121,6 +130,12 @@ export class Player {
       this.group.rotation.y = this.heading;
     }
 
+    if (this.mode.flight && input.isDown('Space')) {
+      this.flying = true;
+      this.vy = 0;
+      this.position.y += FLY_SPEED * dt;
+    }
+
     const groundHere = this.world.heightAt(this.position.x, this.position.z);
     const inWater = groundHere < 0;
     const sneaking = input.sneaking && !inWater;
@@ -137,6 +152,19 @@ export class Player {
     poseHuman(this.human, { walk: this.walk, moving, sneaking, swimming, swing: this.swing / 0.3 });
     this.drainHunger(dt, swimming ? HUNGER_SWIM : moving ? HUNGER_WALK : HUNGER_IDLE);
 
+    if (this.flying) {
+      // Descend gently when Space is released, and land on whatever is below.
+      if (!input.isDown('Space')) {
+        this.position.y -= FLY_SPEED * 0.6 * dt;
+        const floorHere = Math.max(ground, 0) + HIP;
+        if (this.position.y <= floorHere) {
+          this.position.y = floorHere;
+          this.flying = false;
+        }
+      }
+      return;
+    }
+
     if (swimming) {
       this.swimTime += dt * (1 + storm);
       if (this.position.y > SWIM_Y + 0.05) {
@@ -147,7 +175,7 @@ export class Player {
         this.position.y = SWIM_Y + Math.sin(performance.now() / 300) * 0.05;
       }
       this.grounded = false;
-      if (this.swimTime >= SWIM_LIMIT) {
+      if (this.swimTime >= SWIM_LIMIT && !this.mode.invulnerable) {
         this.notify('You drowned! Back to your home island.');
         this.respawn();
       }
@@ -184,6 +212,7 @@ export class Player {
   }
 
   private drainHunger(dt: number, rate: number): void {
+    if (this.mode.invulnerable) return;
     this.hunger = Math.max(0, this.hunger - rate * dt);
     if (this.hunger <= 0) this.damage(STARVE_DAMAGE * dt, 'You starved.');
   }

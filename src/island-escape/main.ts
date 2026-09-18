@@ -16,8 +16,13 @@ import { CraftingMenu, RECIPES, blocker, payFor, type Recipe } from './crafting'
 import { placeTable, placeCampfire, updateCampfires, anyNear, type Campfire } from './structures';
 import { HOTBAR, TOOL_NAMES } from './tools';
 import { installUpdateBanner } from '../shared/update-banner';
+import { chooseMode } from './modes';
+import { installHomeButton } from '../shared/home-button';
 
 installUpdateBanner();
+installHomeButton();
+
+const mode = await chooseMode();
 
 const HIT_RANGE = 2.8;
 const BOARD_RANGE = 4.5;
@@ -44,7 +49,7 @@ const animals = new Animals(scene, world);
 const pirates = new Pirates(scene, world);
 const input = new Input();
 const follow = new FollowCamera();
-const player = new Player(scene, world, notify);
+const player = new Player(scene, world, notify, mode);
 const inventory = createInventory();
 const crafting = new CraftingMenu();
 const tables: THREE.Vector3[] = [];
@@ -52,8 +57,24 @@ const fires: Campfire[] = [];
 let boat: Boat | null = null;
 let won = false;
 
+if (mode.startingSupplies) {
+  inventory.wood = 200;
+  inventory.stone = 200;
+  inventory.rawMeat = 10;
+  inventory.cookedMeat = 10;
+  inventory.axe = true;
+  inventory.pickaxe = true;
+  inventory.sword = true;
+  inventory.pot = true;
+}
+
+document.body.classList.add('playing');
 follow.update(0, player.position, null, true);
-notify('Collect wood and stone, craft, eat, and build a boat to reach the city.');
+notify(
+  mode.startingSupplies
+    ? 'Creative mode. Hold Space to fly, and build whatever you like.'
+    : 'Collect wood and stone, craft, eat, and build a boat to reach the city.',
+);
 
 function craftContext(): { nearTable: boolean; nearFire: boolean; hasBoat: boolean } {
   return {
@@ -259,7 +280,7 @@ function animate(): void {
     trees.update(dt);
     rocks.update(dt, player.position);
     animals.update(dt);
-    pirates.update(dt, player, notify);
+    pirates.update(dt, player, notify, mode.pirates);
     updateCampfires(fires, dt);
 
     const toCity = world.city.center.clone().sub(new THREE.Vector2(player.position.x, player.position.z));
@@ -273,6 +294,7 @@ function animate(): void {
       hp: player.hp,
       hunger: player.hunger,
       inventory,
+      mode,
       day: day.day,
       night: day.phase < 0.2 || day.phase > 0.8,
       swimTime: player.swimTime,

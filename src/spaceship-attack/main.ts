@@ -1,123 +1,80 @@
-import * as THREE from 'three';
 import { installUpdateBanner } from '../shared/update-banner';
-import { chooseMode, type Mode } from './modes';
+import { chooseMode } from './modes';
+import { installHomeButton } from '../shared/home-button';
 import { Input } from './input';
-import { PlayerShip } from './player-ship';
-import { Enemies } from './enemies';
-import { Bullets } from './bullets';
-import { Explosions } from './explosions';
 import { Starfield } from './starfield';
-import { Hud } from './hud';
-import { createLoadout, upgradeFor, AMMO_PER_KILL, KILLS_PER_UPGRADE } from './upgrades';
+import { createGame, update } from './game';
+import { draw, fitCanvas } from './render';
 
 installUpdateBanner();
+installHomeButton();
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.setSize(window.innerWidth, window.innerHeight);
-document.body.appendChild(renderer.domElement);
+const canvas = document.querySelector<HTMLCanvasElement>('#screen');
+if (!canvas) throw new Error('Missing #screen canvas');
+const ctx = canvas.getContext('2d');
+if (!ctx) throw new Error('Canvas 2D is not available');
 
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x05070f);
-scene.fog = new THREE.Fog(0x05070f, 120, 230);
-
-const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 400);
+let scale = fitCanvas(canvas);
 window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  scale = fitCanvas(canvas);
 });
 
-scene.add(new THREE.HemisphereLight(0x6f8fd0, 0x0a0f1e, 1.1));
-const keyLight = new THREE.DirectionalLight(0xffffff, 1.6);
-keyLight.position.set(20, 40, 20);
-scene.add(keyLight);
+const messages = document.querySelector<HTMLElement>('#messages');
+function notify(text: string): void {
+  if (!messages) return;
+  const el = document.createElement('div');
+  el.className = 'msg';
+  el.textContent = text;
+  messages.appendChild(el);
+  setTimeout(() => el.classList.add('fade'), 1800);
+  setTimeout(() => el.remove(), 2800);
+}
+
+const overlay = document.querySelector<HTMLElement>('#overlay');
+function showGameOver(score: number, kills: number, distance: number): void {
+  if (!overlay) return;
+  overlay.innerHTML =
+    `<h1>Shot down</h1><p>Score ${score} with ${kills} kills over ${Math.round(distance)} metres.</p>` +
+    `<p>Press R to fly again.</p>`;
+  overlay.style.display = 'flex';
+}
 
 const input = new Input();
-const hud = new Hud();
-const starfield = new Starfield(scene);
-const bullets = new Bullets(scene);
-const explosions = new Explosions(scene);
-const enemies = new Enemies(scene);
+const stars = new Starfield();
+const mode = await chooseMode();
+const game = createGame(mode);
 
-const mode: Mode = await chooseMode();
-const loadout = createLoadout(mode.startAmmo);
-const player = new PlayerShip(scene, mode);
-let kills = 0;
-let upgradesEarned = 0;
-let over = false;
+canvas.style.display = 'block';
+notify(mode.enemies ? 'Enemy ships incoming. Space to shoot.' : 'Free flight. Nothing can hurt you.');
 
-hud.show();
-hud.message(mode.enemies ? 'Enemy ships ahead. Good luck.' : 'Free flight. Nothing can hurt you.');
+let last = performance.now();
+let announced = false;
+function frame(now: number): void {
+  const dt = Math.min((now - last) / 1000, 0.05);
+  last = now;
 
-const CAMERA_OFFSET = new THREE.Vector3(0, 4.5, 14);
+  update(game, dt, input, notify);
+  stars.update(dt, game.boosting ? 2.6 : 1);
+  draw(ctx!, scale, game, stars);
 
-function awardKill(at: THREE.Vector3): void {
-  explosions.spawn(at);
-  kills += 1;
-  if (Number.isFinite(loadout.ammo)) {
-    loadout.ammo = Math.min(loadout.maxAmmo, loadout.ammo + AMMO_PER_KILL);
+  if (game.over && !announced) {
+    announced = true;
+    showGameOver(game.score, game.kills, game.distance);
   }
-  if (kills % KILLS_PER_UPGRADE === 0) {
-    const upgrade = upgradeFor(upgradesEarned);
-    upgrade.apply(loadout);
-    upgradesEarned += 1;
-    hud.message(`Upgrade: ${upgrade.name}`);
-  }
-}
-
-const timer = new THREE.Timer();
-function animate(): void {
-  timer.update();
-  const dt = Math.min(timer.getDelta(), 0.05);
-
-  if (over) {
-    if (input.wasPressed('KeyR')) location.reload();
-    input.endFrame();
-    explosions.update(dt);
-    renderer.render(scene, camera);
-    return;
-  }
-
-  const beforeZ = player.position.z;
-  player.update(dt, input, loadout, bullets);
-  starfield.advance(beforeZ - player.position.z);
-
-  bullets.update(dt);
-  for (const kill of enemies.update(dt, player, bullets, mode.enemies)) awardKill(kill.position);
-  if (mode.enemies) enemies.checkPlayerHits(player, bullets);
-  explosions.update(dt);
-  starfield.update(player.position);
-
-  if (player.dead) {
-    over = true;
-    explosions.spawn(player.position.clone());
-    player.group.visible = false;
-    hud.showGameOver(kills, player.distance);
-  }
-
-  camera.position.lerp(player.position.clone().add(CAMERA_OFFSET), 1 - Math.exp(-dt * 9));
-  camera.lookAt(player.position.x, player.position.y + 1, player.position.z - 24);
-  keyLight.position.set(player.position.x + 20, player.position.y + 40, player.position.z + 20);
-
-  hud.update({
-    hull: player.hull,
-    loadout,
-    mode,
-    kills,
-    killsToNext: KILLS_PER_UPGRADE - (kills % KILLS_PER_UPGRADE),
-    distance: player.distance,
-    boosting: player.boosting,
-  });
+  if (game.over && input.wasPressed('KeyR')) location.reload();
 
   input.endFrame();
-  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
 }
-renderer.setAnimationLoop(animate);
+requestAnimationFrame(frame);
 
 if (import.meta.env.DEV) {
   // Debug hook for scripted testing: window.game in the dev console.
   Object.assign(window, {
-    game: { player, enemies, bullets, loadout, mode, input, getKills: () => kills, isOver: () => over },
+    game,
+    input,
+    stars,
+    // Advance one fixed step, for scripted tests.
+    __step: () => update(game, 1 / 60, input, notify),
   });
 }

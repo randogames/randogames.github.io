@@ -10,7 +10,12 @@ const errors = [];
 page.on('console', (m) => { if (m.type() === 'error' || (m.type() === 'warning' && !m.text().includes('GL Driver'))) errors.push(`${m.type()}: ${m.text()}`); });
 page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
 await page.goto('http://localhost:5173/island-escape/');
-await page.waitForTimeout(1500);
+await page.waitForSelector('button.mode');
+console.log('modes offered:', await page.$$eval('button.mode h2', (n) => n.map((e) => e.textContent)));
+await page.screenshot({ path: 'playtest-out/ie-modes.png' });
+await page.click('button.mode[data-id="adventure"]');
+await page.waitForFunction(() => !!window.game, null, { timeout: 15000 });
+await page.waitForTimeout(1200);
 
 const log = (...a) => console.log(a.map((x) => (typeof x === 'object' ? JSON.stringify(x) : x)).join(' '));
 const shot = (name) => page.screenshot({ path: `playtest-out/${name}.png` });

@@ -1,0 +1,10 @@
+/* "All games" button, shown in the corner of every game. */
+#home {
+  position: fixed; top: 12px; left: 14px; z-index: 20;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px; border-radius: 999px; cursor: pointer;
+  background: rgba(10, 16, 28, .72); border: 1px solid rgba(255, 255, 255, .28);
+  color: #eef3f8; font: 600 13px system-ui, sans-serif; text-decoration: none;
+  opacity: .38; transition: opacity .18s, transform .18s, background .18s;
+}
+#home:hover, #home:focus-visible, #home.near { opacity: 1; transform: translateY(1px); background: rgba(24, 40, 66, .92); }

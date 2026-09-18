@@ -26,12 +26,21 @@ export class Input {
     return (this.isDown('KeyW', 'ArrowUp') ? 1 : 0) - (this.isDown('KeyS', 'ArrowDown') ? 1 : 0);
   }
 
-  get shooting(): boolean {
-    return this.isDown('Space');
+  /**
+   * True only on the frame Space goes down. Holding it does not keep firing,
+   * so every shot is a separate, aimed press.
+   */
+  get firePressed(): boolean {
+    return this.wasPressed('Space');
   }
 
   get boosting(): boolean {
     return this.isDown('ShiftLeft', 'ShiftRight');
+  }
+
+  /** Repair ability: spends ammo to refill the hull. */
+  get healPressed(): boolean {
+    return this.wasPressed('KeyH');
   }
 
   isDown(...codes: string[]): boolean {

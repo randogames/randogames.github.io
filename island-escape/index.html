@@ -4,10 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Island Escape</title>
+    <link rel="stylesheet" href="/src/shared/mode-picker.css" />
+    <link rel="stylesheet" href="/src/shared/home-button.css" />
     <style>
       html, body { margin: 0; height: 100%; overflow: hidden; background: #0b2a4a; }
       canvas { display: block; }
       #hud, #hud * { user-select: none; pointer-events: none; }
+      #hud, #hotbar { display: none; }
+      body.playing #hud { display: block; }
+      body.playing #hotbar { display: flex; }
       #hud {
         position: fixed; inset: 0; color: #fff;
         font: 15px/1.4 system-ui, sans-serif; text-shadow: 0 1px 2px #000;
@@ -51,8 +56,6 @@
       .slot.owned { opacity: 1; }
       .slot.selected { border-color: #ffd54f; background: rgba(255, 213, 79, .25); }
       .slot .key { position: absolute; top: 2px; left: 6px; font-size: 11px; opacity: .8; }
-      #home { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); color: #fff; opacity: .6; text-decoration: none; font: 13px system-ui, sans-serif; text-shadow: 0 1px 2px #000; }
-      #home:hover { opacity: 1; }
       #overlay {
         position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center;
         background: rgba(0,0,0,.65); color: #fff; font: 20px system-ui, sans-serif; text-align: center;
@@ -61,7 +64,8 @@
     </style>
   </head>
   <body>
-    <a id="home" href="/">&larr; All games</a>
+    <div id="mode-picker"></div>
+    <a id="home" href="/">&#x2190; All games</a>
     <div id="hud">
       <div id="top-left">
         <div id="stats">Day 1</div>

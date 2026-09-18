@@ -1,0 +1,120 @@
+import { VIEW_HEIGHT, VIEW_WIDTH } from './world';
+import { MAX_HULL } from './entities';
+import { HEAL_AMMO_SHARE } from './game';
+import { drawBullet, drawEnemy, drawPickup, drawPlayer } from './sprites';
+import type { Starfield } from './starfield';
+import type { GameState } from './game';
+
+/** Fits the play area to the window while keeping its proportions. */
+export function fitCanvas(canvas: HTMLCanvasElement): number {
+  const dpr = Math.min(window.devicePixelRatio, 2);
+  const scale = Math.min(window.innerWidth / VIEW_WIDTH, window.innerHeight / VIEW_HEIGHT);
+  canvas.width = Math.round(VIEW_WIDTH * scale * dpr);
+  canvas.height = Math.round(VIEW_HEIGHT * scale * dpr);
+  canvas.style.width = `${VIEW_WIDTH * scale}px`;
+  canvas.style.height = `${VIEW_HEIGHT * scale}px`;
+  return scale * dpr;
+}
+
+export function draw(ctx: CanvasRenderingContext2D, scale: number, g: GameState, stars: Starfield): void {
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  const sky = ctx.createLinearGradient(0, 0, 0, VIEW_HEIGHT);
+  sky.addColorStop(0, '#0a1028');
+  sky.addColorStop(1, '#05070f');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT);
+
+  stars.draw(ctx);
+
+  for (const p of g.pickups) {
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    drawPickup(ctx, p.pulse);
+    ctx.restore();
+  }
+
+  for (const b of g.bullets) {
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    drawBullet(ctx, b.hostile);
+    ctx.restore();
+  }
+
+  for (const e of g.enemies) {
+    ctx.save();
+    ctx.translate(e.x, e.y);
+    drawEnemy(ctx, e.shape, e.spin);
+    ctx.restore();
+  }
+
+  const blink = g.hurtFlash > 0 && Math.sin(g.hurtFlash * 60) < -0.3;
+  if (!g.over && !blink) {
+    ctx.save();
+    ctx.translate(g.x, g.y);
+    drawPlayer(ctx, g.boosting, g.tilt);
+    ctx.restore();
+  }
+
+  for (const x of g.explosions) {
+    const t = 1 - x.life / x.maxLife;
+    ctx.save();
+    ctx.globalAlpha = 1 - t;
+    ctx.translate(x.x, x.y);
+    const r = x.size * (0.3 + t * 0.9);
+    const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
+    glow.addColorStop(0, '#fff3b0');
+    glow.addColorStop(0.5, '#ff8b25');
+    glow.addColorStop(1, 'rgba(255, 60, 0, 0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  if (g.hurtFlash > 0) {
+    ctx.fillStyle = `rgba(255, 40, 40, ${g.hurtFlash * 0.4})`;
+    ctx.fillRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT);
+  }
+
+  if (g.healFlash > 0) {
+    ctx.save();
+    ctx.globalAlpha = g.healFlash / 0.6;
+    ctx.strokeStyle = '#7dffb0';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(g.x, g.y, 20 + (1 - g.healFlash / 0.6) * 26, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  drawHud(ctx, g);
+}
+
+function drawHud(ctx: CanvasRenderingContext2D, g: GameState): void {
+  ctx.font = '600 13px system-ui, sans-serif';
+  ctx.textBaseline = 'top';
+
+  // Hull bar.
+  ctx.fillStyle = 'rgba(255,255,255,.15)';
+  ctx.fillRect(12, 12, 140, 10);
+  ctx.fillStyle = g.hull < 30 ? '#e53935' : '#4fc3f7';
+  ctx.fillRect(12, 12, 140 * (g.hull / MAX_HULL), 10);
+  ctx.fillStyle = '#eef3f8';
+  ctx.fillText(g.mode.invulnerable ? 'Hull: invulnerable' : `Hull ${Math.ceil(g.hull)}/${MAX_HULL}`, 12, 28);
+
+  ctx.fillStyle = g.loadout.ammo === 0 ? '#e53935' : '#eef3f8';
+  ctx.fillText(`Ammo ${g.loadout.ammo}/${g.loadout.maxAmmo}`, 12, 46);
+  ctx.fillStyle = '#eef3f8';
+  ctx.fillText(`Cannons ${g.loadout.guns}   Damage ${g.loadout.damage}`, 12, 64);
+  const healCost = Math.ceil(g.loadout.maxAmmo * HEAL_AMMO_SHARE);
+  ctx.fillStyle = g.hull < MAX_HULL && g.loadout.ammo >= healCost ? '#7dffb0' : 'rgba(238,243,248,.55)';
+  ctx.fillText(`H repair: full hull for ${healCost} ammo`, 12, 82);
+  ctx.fillStyle = '#eef3f8';
+
+  ctx.textAlign = 'right';
+  ctx.fillText(`${g.mode.name} mode`, VIEW_WIDTH - 12, 12);
+  ctx.fillText(`Score ${g.score}   Kills ${g.kills}`, VIEW_WIDTH - 12, 30);
+  ctx.fillText(`${Math.round(g.distance)} m${g.boosting ? '   BOOST' : ''}`, VIEW_WIDTH - 12, 48);
+  ctx.textAlign = 'left';
+}

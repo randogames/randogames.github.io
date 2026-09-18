@@ -1,11 +1,13 @@
 import { MAX_HP, MAX_HUNGER, SWIM_LIMIT } from './player';
 import type { Inventory } from './inventory';
 import { HOTBAR, TOOL_NAMES } from './tools';
+import type { Mode } from './modes';
 
 export interface HudState {
   hp: number;
   hunger: number;
   inventory: Inventory;
+  mode: Mode;
   day: number;
   night: boolean;
   swimTime: number;
@@ -65,9 +67,9 @@ export class Hud {
 
   update(s: HudState): void {
     this.hpBar.style.width = `${(s.hp / MAX_HP) * 100}%`;
-    this.hpText.textContent = `${Math.ceil(s.hp)} / ${MAX_HP}`;
+    this.hpText.textContent = s.mode.invulnerable ? 'invulnerable' : `${Math.ceil(s.hp)} / ${MAX_HP}`;
     this.hungerBar.style.width = `${(s.hunger / MAX_HUNGER) * 100}%`;
-    this.hungerText.textContent = `${Math.ceil(s.hunger)} / ${MAX_HUNGER}`;
+    this.hungerText.textContent = s.mode.invulnerable ? 'full' : `${Math.ceil(s.hunger)} / ${MAX_HUNGER}`;
     this.hungerBar.style.background = s.hunger < 20 ? '#e53935' : '#c98a2b';
 
     this.swim.style.display = s.swimming ? 'block' : 'none';
@@ -75,7 +77,7 @@ export class Hud {
     this.swimBar.style.width = `${(left / SWIM_LIMIT) * 100}%`;
     this.swimBar.style.background = left < 3 ? '#e53935' : '#29b6f6';
 
-    this.stats.textContent = `Day ${s.day}${s.night ? ' (night)' : ''}${s.storm ? '   STORM' : ''}`;
+    this.stats.textContent = `${s.mode.name} mode   Day ${s.day}${s.night ? ' (night)' : ''}${s.storm ? '   STORM' : ''}`;
     const inv = s.inventory;
     this.items.textContent = `Wood ${inv.wood}   Stone ${inv.stone}   Raw meat ${inv.rawMeat}   Cooked meat ${inv.cookedMeat}`;
     for (const slot of this.hotbar.children) {

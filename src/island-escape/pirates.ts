@@ -35,7 +35,8 @@ export class Pirates {
     return this.pirates.length > 0;
   }
 
-  update(dt: number, player: Player, notify: (m: string) => void): void {
+  update(dt: number, player: Player, notify: (m: string) => void, enabled: boolean): void {
+    if (!enabled) return;
     if (this.pirates.length === 0 && !this.ship) {
       if (player.onLand && !this.world.islandAt(player.position.x, player.position.z)?.isCity) {
         this.raidTimer -= dt;

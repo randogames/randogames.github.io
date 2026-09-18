@@ -1,46 +1,45 @@
-import * as THREE from 'three';
+import { VIEW_HEIGHT, VIEW_WIDTH } from './world';
 
-const COUNT = 1400;
-const SPREAD = 260;
+interface Star {
+  x: number;
+  y: number;
+  /** Bigger stars sit closer and scroll faster. */
+  size: number;
+  speed: number;
+}
 
-/** Stars and drifting nebula haze that recycle around the player so the sky never runs out. */
+/** Three layers of stars scrolling down the screen. */
 export class Starfield {
-  private readonly points: THREE.Points;
-  private readonly positions: Float32Array;
+  private readonly stars: Star[] = [];
 
-  constructor(scene: THREE.Scene) {
-    this.positions = new Float32Array(COUNT * 3);
-    for (let i = 0; i < COUNT; i++) {
-      this.positions[i * 3] = (Math.random() - 0.5) * SPREAD;
-      this.positions[i * 3 + 1] = (Math.random() - 0.5) * SPREAD * 0.6;
-      this.positions[i * 3 + 2] = (Math.random() - 0.5) * SPREAD;
+  constructor(count = 110) {
+    for (let i = 0; i < count; i++) {
+      const size = Math.random() < 0.7 ? 1 : Math.random() < 0.8 ? 1.6 : 2.4;
+      this.stars.push({
+        x: Math.random() * VIEW_WIDTH,
+        y: Math.random() * VIEW_HEIGHT,
+        size,
+        speed: 18 + size * 34,
+      });
     }
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.BufferAttribute(this.positions, 3));
-    this.points = new THREE.Points(
-      geometry,
-      new THREE.PointsMaterial({ color: 0xffffff, size: 0.55, sizeAttenuation: true, transparent: true, opacity: 0.9 }),
-    );
-    scene.add(this.points);
   }
 
-  /** Keep stars centred on the ship, wrapping any that fall too far behind. */
-  update(focus: THREE.Vector3): void {
-    this.points.position.set(focus.x, focus.y, focus.z);
-    const half = SPREAD / 2;
-    for (let i = 0; i < COUNT; i++) {
-      const z = this.positions[i * 3 + 2]!;
-      // Ship flies toward -Z, so stars drift to +Z in ship space.
-      if (z > half) this.positions[i * 3 + 2] = z - SPREAD;
-      else if (z < -half) this.positions[i * 3 + 2] = z + SPREAD;
+  update(dt: number, scrollBoost: number): void {
+    for (const s of this.stars) {
+      s.y += s.speed * scrollBoost * dt;
+      if (s.y > VIEW_HEIGHT) {
+        s.y -= VIEW_HEIGHT;
+        s.x = Math.random() * VIEW_WIDTH;
+      }
     }
-    this.points.geometry.attributes['position']!.needsUpdate = true;
   }
 
-  /** Stars scroll past as the ship advances. */
-  advance(distance: number): void {
-    for (let i = 0; i < COUNT; i++) {
-      this.positions[i * 3 + 2] = this.positions[i * 3 + 2]! + distance;
+  draw(ctx: CanvasRenderingContext2D): void {
+    for (const s of this.stars) {
+      ctx.globalAlpha = 0.35 + s.size * 0.25;
+      ctx.fillStyle = '#dbe9ff';
+      ctx.fillRect(s.x, s.y, s.size, s.size * 2);
     }
+    ctx.globalAlpha = 1;
   }
 }
