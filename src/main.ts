@@ -14,6 +14,7 @@ import { Hud } from './hud';
 import { createInventory } from './inventory';
 import { CraftingMenu, RECIPES, blocker, payFor, type Recipe } from './crafting';
 import { placeTable, placeCampfire, updateCampfires, anyNear, type Campfire } from './structures';
+import { HOTBAR, TOOL_NAMES } from './tools';
 
 const HIT_RANGE = 2.8;
 const BOARD_RANGE = 4.5;
@@ -107,13 +108,18 @@ function craft(recipe: Recipe): void {
     case 'pot': inventory.pot = true; break;
     case 'cook': inventory.cookedMeat += 1; break;
   }
-  notify(recipe.id === 'cook' ? 'Meat cooked. Press Q to eat.' : `You made a ${recipe.name.toLowerCase()}.`);
+  if (recipe.id === 'cook') {
+    notify('Meat cooked. Press Q to eat.');
+  } else {
+    const slot = HOTBAR.indexOf(recipe.id as (typeof HOTBAR)[number]) + 1;
+    notify(`You made a ${recipe.name.toLowerCase()}. Press ${slot} to hold it.`);
+  }
 }
 
 function handleHit(): void {
   player.swingArm();
   const from = player.position;
-  const weapon = inventory.sword ? 2 : 1;
+  const weapon = inventory.held === 'sword' ? 2 : 1;
 
   const fight = pirates.hit(from, HIT_RANGE, weapon);
   if (fight.hit) {
@@ -142,12 +148,12 @@ function handleHit(): void {
   } else if (closest === dTree) {
     const chop = trees.hit(from, HIT_RANGE);
     if (chop) {
-      const wood = chop.wood * (inventory.axe ? 2 : 1);
+      const wood = chop.wood * (inventory.held === 'axe' ? 2 : 1);
       inventory.wood += wood;
       if (chop.felled) notify(`Timber! +${wood} wood`);
     }
   } else {
-    const mine = rocks.hit(from, HIT_RANGE, inventory.pickaxe ? 2 : 1);
+    const mine = rocks.hit(from, HIT_RANGE, inventory.held === 'pickaxe' ? 2 : 1);
     if (mine) {
       inventory.stone += mine.stone;
       if (mine.depleted) notify(`Rock broken up. +${mine.stone} stone`);
@@ -184,6 +190,15 @@ function handleActions(): void {
 
   if (input.action) handleHit();
   if (input.wasPressed('KeyQ')) handleEat();
+  HOTBAR.forEach((kind, i) => {
+    if (!input.wasPressed(`Digit${i + 1}`)) return;
+    if (!inventory[kind]) {
+      notify(`You don't have a ${TOOL_NAMES[kind].toLowerCase()} yet. Craft one (C).`);
+      return;
+    }
+    inventory.held = inventory.held === kind ? null : kind;
+    player.hold(inventory.held);
+  });
 
   if (input.boat) {
     if (player.boat) {

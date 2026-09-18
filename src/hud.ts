@@ -1,5 +1,6 @@
 import { MAX_HP, MAX_HUNGER, SWIM_LIMIT } from './player';
 import type { Inventory } from './inventory';
+import { HOTBAR, TOOL_NAMES } from './tools';
 
 export interface HudState {
   hp: number;
@@ -33,6 +34,7 @@ export class Hud {
   private readonly compassText: HTMLElement;
   private readonly messages: HTMLElement;
   private readonly overlay: HTMLElement;
+  private readonly hotbar: HTMLElement;
 
   constructor() {
     this.hpText = byId('hp-text');
@@ -48,6 +50,8 @@ export class Hud {
     this.compassText = byId('compass-text');
     this.messages = byId('messages');
     this.overlay = byId('overlay');
+    this.hotbar = byId('hotbar');
+    this.hotbar.innerHTML = HOTBAR.map((k, i) => `<div class="slot" data-tool="${k}"><span class="key">${i + 1}</span>${TOOL_NAMES[k]}</div>`).join('');
   }
 
   message(text: string): void {
@@ -73,10 +77,12 @@ export class Hud {
 
     this.stats.textContent = `Day ${s.day}${s.night ? ' (night)' : ''}${s.storm ? '   STORM' : ''}`;
     const inv = s.inventory;
-    const tools = [inv.axe && 'axe', inv.pickaxe && 'pickaxe', inv.sword && 'sword', inv.pot && 'pot'].filter(Boolean).join(', ');
-    this.items.textContent =
-      `Wood ${inv.wood}   Stone ${inv.stone}   Raw meat ${inv.rawMeat}   Cooked meat ${inv.cookedMeat}` +
-      (tools ? `\nTools: ${tools}` : '');
+    this.items.textContent = `Wood ${inv.wood}   Stone ${inv.stone}   Raw meat ${inv.rawMeat}   Cooked meat ${inv.cookedMeat}`;
+    for (const slot of this.hotbar.children) {
+      const kind = (slot as HTMLElement).dataset['tool'];
+      slot.classList.toggle('owned', kind !== undefined && inv[kind as keyof Inventory] === true);
+      slot.classList.toggle('selected', kind === inv.held);
+    }
 
     if (s.onBoat) this.hint.textContent = 'Sail with WASD. B near land to go ashore.';
     else if (s.hasBoat) this.hint.textContent = 'Walk to your boat and press B to board.';

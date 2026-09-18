@@ -40,6 +40,17 @@
       .recipe.ok { background: rgba(102, 187, 106, .25); }
       .recipe.no { opacity: .55; }
       .recipe .cost { opacity: .8; font-size: 13px; margin-left: 6px; }
+      #hotbar {
+        position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
+        display: flex; gap: 6px;
+      }
+      .slot {
+        width: 92px; padding: 8px 6px 6px; box-sizing: border-box; text-align: center; font-size: 12px; line-height: 1.2;
+        background: rgba(0,0,0,.5); border: 2px solid rgba(255,255,255,.25); border-radius: 8px; opacity: .45; position: relative;
+      }
+      .slot.owned { opacity: 1; }
+      .slot.selected { border-color: #ffd54f; background: rgba(255, 213, 79, .25); }
+      .slot .key { position: absolute; top: 2px; left: 6px; font-size: 11px; opacity: .8; }
       #overlay {
         position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center;
         background: rgba(0,0,0,.65); color: #fff; font: 20px system-ui, sans-serif; text-align: center;
@@ -60,8 +71,9 @@
         <div id="hint"></div>
       </div>
       <div id="compass"><div id="compass-arrow">&#x2B06;</div><div id="compass-text"></div></div>
-      <div id="controls">WASD move &middot; Shift sneak &middot; Space jump &middot; E / Tab hit &middot; C craft &middot; Q eat &middot; B boat &middot; Scroll zoom</div>
+      <div id="controls">WASD move &middot; Shift sneak &middot; Space jump &middot; E / Tab hit &middot; C craft &middot; 1-4 hold tool &middot; Q eat &middot; B boat &middot; Scroll zoom</div>
       <div id="messages"></div>
+      <div id="hotbar"></div>
     </div>
     <div id="crafting"></div>
     <div id="overlay"></div>

@@ -3,6 +3,7 @@ import type { Input } from './input';
 import type { World } from './world';
 import type { Boat } from './boat';
 import { buildHuman, poseHuman, type Human } from './human';
+import { buildTool, type ToolKind } from './tools';
 
 const WALK_SPEED = 8;
 const SNEAK_SPEED = 3;
@@ -35,6 +36,7 @@ export class Player {
   private grounded = true;
   private swing = 0;
   private walk = 0;
+  private toolMesh: THREE.Group | null = null;
 
   constructor(scene: THREE.Scene, private readonly world: World, private readonly notify: Notify) {
     this.human = buildHuman({ shirt: 0x2f80c2, pants: 0x3b3b5c, hair: 0x4a2e1a });
@@ -78,6 +80,20 @@ export class Player {
   /** Restore hunger by eating. */
   eat(amount: number): void {
     this.hunger = Math.min(MAX_HUNGER, this.hunger + amount);
+  }
+
+  /** Put a tool in the right hand, or empty the hand with null. */
+  hold(kind: ToolKind | null): void {
+    if (this.toolMesh) {
+      this.human.rightArm.remove(this.toolMesh);
+      this.toolMesh = null;
+    }
+    if (!kind) return;
+    const tool = buildTool(kind);
+    tool.position.set(0, -0.62, 0.08);
+    tool.rotation.x = Math.PI / 2; // grip in the hand, tip pointing forward
+    this.human.rightArm.add(tool);
+    this.toolMesh = tool;
   }
 
   /** Brief swing animation when hitting something. */

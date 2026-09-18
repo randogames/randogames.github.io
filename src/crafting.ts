@@ -50,6 +50,7 @@ export function blocker(r: Recipe, inv: Inventory, ctx: CraftContext): string | 
   if (r.needsTable && !ctx.nearTable) return 'stand next to a crafting table';
   if (r.needsFire && !ctx.nearFire) return 'stand next to a campfire';
   if (r.needsPot && !inv.pot) return 'you need a cooking pot';
+  if (r.needsPot && inv.held !== 'pot') return 'hold the cooking pot (close the menu, press 4)';
   if (inv.wood < r.wood || inv.stone < r.stone || inv.rawMeat < r.rawMeat) return 'not enough materials';
   return null;
 }

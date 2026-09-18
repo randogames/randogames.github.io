@@ -1,4 +1,8 @@
+import type { ToolKind } from './tools';
+
 export interface Inventory {
+  /** Tool currently in hand, chosen with keys 1-4. */
+  held: ToolKind | null;
   wood: number;
   stone: number;
   rawMeat: number;
@@ -10,5 +14,5 @@ export interface Inventory {
 }
 
 export function createInventory(): Inventory {
-  return { wood: 0, stone: 0, rawMeat: 0, cookedMeat: 0, axe: false, pickaxe: false, sword: false, pot: false };
+  return { held: null, wood: 0, stone: 0, rawMeat: 0, cookedMeat: 0, axe: false, pickaxe: false, sword: false, pot: false };
 }
