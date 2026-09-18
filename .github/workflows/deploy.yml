@@ -1,0 +1,52 @@
+# Builds the site and publishes it to GitHub Pages on every push to main.
+#
+# Before this can work, enable Pages for the repository once:
+# Settings -> Pages -> Build and deployment -> Source: GitHub Actions.
+#
+# The base path is taken from the repository name, so the site works at
+# https://<owner>.github.io/<repo>/. For a site served at a domain root
+# (a repository named <owner>.github.io), set SITE_BASE to "/" below.
+name: Deploy site
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build
+        run: npm run build
+        env:
+          # A repository named <owner>.github.io is served at the root.
+          SITE_BASE: ${{ endsWith(github.event.repository.name, '.github.io') && '/' || format('/{0}/', github.event.repository.name) }}
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

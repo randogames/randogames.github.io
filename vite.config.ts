@@ -16,6 +16,8 @@ function deferredReload(): Plugin {
 }
 
 export default defineConfig({
+  // A project site lives under /<repo>/, so the base is configurable.
+  base: process.env['SITE_BASE'] ?? '/',
   plugins: [deferredReload()],
   server: {
     port: 5173,
