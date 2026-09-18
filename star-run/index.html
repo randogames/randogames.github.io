@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Star Run</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #05070f; color: #eef3f8; }
+      canvas { display: block; }
+      #home { position: fixed; top: 12px; left: 14px; z-index: 5; color: #eef3f8; opacity: .55; text-decoration: none; font: 13px system-ui, sans-serif; }
+      #home:hover { opacity: 1; }
+
+      #mode-picker {
+        display: none; position: fixed; inset: 0; z-index: 10; place-items: center;
+        background: radial-gradient(circle at 50% 30%, #12233f, #05070f 70%);
+        font: 17px/1.5 system-ui, sans-serif; text-align: center;
+      }
+      #mode-picker h1 { font-size: 46px; margin: 0 0 4px; letter-spacing: 1px; }
+      #mode-picker .sub { opacity: .7; margin: 0 0 26px; }
+      .modes { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
+      button.mode {
+        position: relative; width: 290px; padding: 22px 20px; text-align: left; cursor: pointer;
+        color: inherit; font: inherit; background: rgba(255,255,255,.07);
+        border: 1px solid rgba(255,255,255,.16); border-radius: 14px; transition: transform .12s, background .12s;
+      }
+      button.mode:hover { transform: translateY(-2px); background: rgba(255,255,255,.13); }
+      button.mode h2 { margin: 0 0 6px; font-size: 24px; }
+      button.mode p { margin: 0; opacity: .78; font-size: 15px; }
+      button.mode .key { position: absolute; top: 10px; right: 14px; opacity: .5; font-size: 13px; }
+      .controls-note { margin: 26px 0 0; opacity: .6; font-size: 14px; }
+
+      #hud, #hud * { user-select: none; pointer-events: none; }
+      #hud {
+        display: none; position: fixed; inset: 0; font: 15px/1.4 system-ui, sans-serif;
+        text-shadow: 0 1px 3px #000;
+      }
+      #top-left { position: absolute; top: 40px; left: 14px; width: 250px; }
+      .label { display: flex; justify-content: space-between; }
+      .bar { height: 11px; background: rgba(255,255,255,.14); border-radius: 6px; overflow: hidden; margin: 3px 0 9px; }
+      .bar > div { height: 100%; width: 100%; transition: width .15s; }
+      #stats { font-weight: 600; margin-bottom: 6px; }
+      #weapons { opacity: .85; margin-top: 4px; }
+      #controls { position: absolute; bottom: 12px; left: 14px; opacity: .65; font-size: 13px; }
+      #crosshair {
+        position: absolute; top: 50%; left: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px;
+        border: 1px solid rgba(255,255,255,.5); border-radius: 50%;
+      }
+      #messages { position: absolute; top: 22%; left: 0; right: 0; text-align: center; }
+      .msg { font-size: 19px; font-weight: 600; margin: 4px 0; transition: opacity 1s; color: #ffd54f; }
+      .msg.fade { opacity: 0; }
+      #overlay {
+        position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center;
+        background: rgba(0,0,0,.7); font: 20px system-ui, sans-serif; text-align: center; z-index: 8;
+      }
+      #overlay h1 { font-size: 46px; margin: 0 0 12px; }
+    </style>
+  </head>
+  <body>
+    <a id="home" href="/">&larr; All games</a>
+    <div id="mode-picker"></div>
+    <div id="hud">
+      <div id="top-left">
+        <div id="stats"></div>
+        <div class="label"><span>Hull</span><span id="hull-text"></span></div>
+        <div class="bar"><div id="hull-bar"></div></div>
+        <div class="label"><span>Ammo</span><span id="ammo-text"></span></div>
+        <div id="weapons"></div>
+      </div>
+      <div id="crosshair"></div>
+      <div id="messages"></div>
+      <div id="controls">A / D steer &middot; W / S climb &amp; dive &middot; Space shoot &middot; Shift boost</div>
+    </div>
+    <div id="overlay"></div>
+    <script type="module" src="/src/star-run/main.ts"></script>
+  </body>
+</html>
