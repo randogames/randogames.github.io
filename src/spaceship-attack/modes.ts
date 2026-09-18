@@ -39,7 +39,7 @@ export function chooseMode(): Promise<Mode> {
   const root = document.getElementById('mode-picker');
   if (!root) throw new Error('Missing #mode-picker');
   root.innerHTML = `
-    <h1>Star Run</h1>
+    <h1>Spaceship Attack</h1>
     <p class="sub">Pick a mode.</p>
     <div class="modes">
       ${MODES.map((m, i) => `

@@ -20,14 +20,14 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
-    open: '/star-run/', // the game currently being worked on
+    open: '/spaceship-attack/', // the game currently being worked on
   },
   build: {
     rolldownOptions: {
       input: {
         main: 'index.html',
         'island-escape': 'island-escape/index.html',
-        'star-run': 'star-run/index.html',
+        'spaceship-attack': 'spaceship-attack/index.html',
       },
     },
   },
