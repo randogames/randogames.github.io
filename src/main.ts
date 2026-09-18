@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { Timer } from 'three/addons/misc/Timer.js';
 import { createWorld } from './world';
 import { Player } from './player';
 import { Input } from './input';
@@ -21,7 +20,7 @@ const input = new Input();
 const player = new Player(scene, world);
 
 const cameraOffset = new THREE.Vector3(0, 12, 16);
-const timer = new Timer();
+const timer = new THREE.Timer();
 
 function animate(): void {
   timer.update();
