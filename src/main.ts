@@ -4,14 +4,22 @@ import { Player } from './player';
 import { Input } from './input';
 import { FollowCamera } from './camera';
 import { Trees } from './trees';
-import { Boat, BOAT_COST } from './boat';
+import { Rocks } from './rocks';
+import { Animals } from './animals';
+import { Boat } from './boat';
 import { DayCycle } from './day';
 import { Weather } from './weather';
 import { Pirates } from './pirates';
 import { Hud } from './hud';
+import { createInventory } from './inventory';
+import { CraftingMenu, RECIPES, blocker, payFor, type Recipe } from './crafting';
+import { placeTable, placeCampfire, updateCampfires, anyNear, type Campfire } from './structures';
 
 const HIT_RANGE = 2.8;
 const BOARD_RANGE = 4.5;
+const STATION_RANGE = 4;
+const COOKED_MEAT_FOOD = 40;
+const RAW_MEAT_FOOD = 12;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -27,36 +35,155 @@ const world = createWorld(scene);
 const day = new DayCycle(scene);
 const weather = new Weather(scene);
 const trees = new Trees(scene, world);
+const rocks = new Rocks(scene, world);
+const animals = new Animals(scene, world);
 const pirates = new Pirates(scene, world);
 const input = new Input();
 const follow = new FollowCamera();
 const player = new Player(scene, world, notify);
-const inventory = { wood: 0 };
+const inventory = createInventory();
+const crafting = new CraftingMenu();
+const tables: THREE.Vector3[] = [];
+const fires: Campfire[] = [];
 let boat: Boat | null = null;
 let won = false;
 
 follow.update(0, player.position, null, true);
-notify('Collect wood, build a boat, and sail to the city.');
+notify('Collect wood and stone, craft, eat, and build a boat to reach the city.');
 
-function handleActions(): void {
-  if (input.action) {
-    player.swingArm();
-    const fight = pirates.hit(player.position, HIT_RANGE);
-    if (fight.hit) {
-      if (fight.defeated) {
-        inventory.wood += 2;
-        notify('Pirate defeated! They dropped 2 wood.');
-      }
+function craftContext(): { nearTable: boolean; nearFire: boolean; hasBoat: boolean } {
+  return {
+    nearTable: anyNear(tables, player.position, STATION_RANGE),
+    nearFire: anyNear(fires.map((f) => f.position), player.position, STATION_RANGE),
+    hasBoat: boat !== null,
+  };
+}
+
+/** A free spot on land just in front of the player, sliding sideways if something already stands there. */
+function spotInFront(): THREE.Vector3 | null {
+  const p = player.position;
+  const forward = new THREE.Vector3(Math.sin(player.heading), 0, Math.cos(player.heading));
+  const side = new THREE.Vector3(forward.z, 0, -forward.x);
+  const taken = [...tables, ...fires.map((f) => f.position)];
+  for (const offset of [0, 1.8, -1.8, 3.6, -3.6]) {
+    const spot = p.clone().addScaledVector(forward, 2.2).addScaledVector(side, offset);
+    const h = world.heightAt(spot.x, spot.z);
+    if (h < 0) continue;
+    spot.y = h;
+    if (!anyNear(taken, spot, 1.6)) return spot;
+  }
+  return null;
+}
+
+function craft(recipe: Recipe): void {
+  const why = blocker(recipe, inventory, craftContext());
+  if (why) {
+    notify(`Can't craft ${recipe.name}: ${why}.`);
+    return;
+  }
+  if (recipe.id === 'table' || recipe.id === 'campfire') {
+    const spot = spotInFront();
+    if (!spot) {
+      notify('Face some open ground to place that.');
       return;
     }
-    if (player.onLand) {
-      const chop = trees.hit(player.position, HIT_RANGE);
-      if (chop) {
-        inventory.wood += chop.wood;
-        if (chop.felled) notify('Timber! +2 wood');
-      }
+    payFor(recipe, inventory);
+    if (recipe.id === 'table') tables.push(placeTable(scene, spot));
+    else fires.push(placeCampfire(scene, spot));
+    notify(`${recipe.name} placed.`);
+    return;
+  }
+  if (recipe.id === 'boat') {
+    if (!player.onLand) return;
+    payFor(recipe, inventory);
+    buildBoat();
+    return;
+  }
+  payFor(recipe, inventory);
+  switch (recipe.id) {
+    case 'axe': inventory.axe = true; break;
+    case 'pickaxe': inventory.pickaxe = true; break;
+    case 'sword': inventory.sword = true; break;
+    case 'pot': inventory.pot = true; break;
+    case 'cook': inventory.cookedMeat += 1; break;
+  }
+  notify(recipe.id === 'cook' ? 'Meat cooked. Press Q to eat.' : `You made a ${recipe.name.toLowerCase()}.`);
+}
+
+function handleHit(): void {
+  player.swingArm();
+  const from = player.position;
+  const weapon = inventory.sword ? 2 : 1;
+
+  const fight = pirates.hit(from, HIT_RANGE, weapon);
+  if (fight.hit) {
+    if (fight.defeated) {
+      inventory.wood += 2;
+      notify('Pirate defeated! They dropped 2 wood.');
+    }
+    return;
+  }
+  if (!player.onLand) return;
+
+  // Pick whichever thing is closest: animal, tree or rock.
+  const dist = (p: THREE.Vector3 | null): number => (p ? p.distanceTo(from) : Infinity);
+  const dAnimal = dist(animals.nearestAlive(from));
+  const dTree = dist(trees.nearestStanding(from));
+  const dRock = dist(rocks.nearestStanding(from));
+  const closest = Math.min(dAnimal, dTree, dRock);
+  if (closest > HIT_RANGE) return;
+
+  if (closest === dAnimal) {
+    const hunt = animals.hit(from, HIT_RANGE, weapon);
+    if (hunt?.killed) {
+      inventory.rawMeat += hunt.meat;
+      notify(`You got ${hunt.meat} raw meat from the ${hunt.kind}.`);
+    }
+  } else if (closest === dTree) {
+    const chop = trees.hit(from, HIT_RANGE);
+    if (chop) {
+      const wood = chop.wood * (inventory.axe ? 2 : 1);
+      inventory.wood += wood;
+      if (chop.felled) notify(`Timber! +${wood} wood`);
+    }
+  } else {
+    const mine = rocks.hit(from, HIT_RANGE, inventory.pickaxe ? 2 : 1);
+    if (mine) {
+      inventory.stone += mine.stone;
+      if (mine.depleted) notify(`Rock broken up. +${mine.stone} stone`);
     }
   }
+}
+
+function handleEat(): void {
+  if (inventory.cookedMeat > 0) {
+    inventory.cookedMeat -= 1;
+    player.eat(COOKED_MEAT_FOOD);
+    notify('Yum. Cooked meat.');
+  } else if (inventory.rawMeat > 0) {
+    inventory.rawMeat -= 1;
+    player.eat(RAW_MEAT_FOOD);
+    notify('Raw meat. Not great. Cook it over a campfire with a pot.');
+  } else {
+    notify('Nothing to eat. Hunt a chicken or a pig.');
+  }
+}
+
+function handleActions(): void {
+  if (input.wasPressed('KeyC')) crafting.toggle();
+  if (input.wasPressed('Escape')) crafting.close();
+  if (crafting.open) {
+    for (let i = 0; i < RECIPES.length; i++) {
+      if (input.wasPressed(`Digit${i + 1}`)) {
+        const recipe = RECIPES[i];
+        if (recipe) craft(recipe);
+      }
+    }
+    return;
+  }
+
+  if (input.action) handleHit();
+  if (input.wasPressed('KeyQ')) handleEat();
 
   if (input.boat) {
     if (player.boat) {
@@ -64,10 +191,8 @@ function handleActions(): void {
     } else if (boat && boat.position.distanceTo(player.position) <= BOARD_RANGE) {
       player.boat = boat;
       notify('Aboard! Sail with WASD.');
-    } else if (!boat && player.onLand && inventory.wood >= BOAT_COST) {
-      buildBoat();
-    } else if (!boat && player.onLand) {
-      notify(`You need ${BOAT_COST} wood to build a boat (${inventory.wood} so far).`);
+    } else if (!boat) {
+      notify('No boat yet. Craft one at a crafting table (C).');
     }
   }
 }
@@ -79,7 +204,6 @@ function buildBoat(): void {
   if (out.lengthSq() < 0.01) out.set(0, 1);
   out.normalize();
   const spot = island.center.clone().addScaledVector(out, island.radius + 2.5);
-  inventory.wood -= BOAT_COST;
   boat = new Boat(scene, spot.x, spot.y);
   notify('You built a boat! Walk to the shore and press B to board.');
 }
@@ -112,24 +236,33 @@ function animate(): void {
 
   if (!won) {
     handleActions();
-    const moveDir = follow.moveDirection(input.axis);
+    const moveDir = crafting.open ? new THREE.Vector3() : follow.moveDirection(input.axis);
     player.update(dt, input, moveDir, weather.wind, weather.storm);
     trees.update(dt);
+    rocks.update(dt, player.position);
+    animals.update(dt);
     pirates.update(dt, player, notify);
+    updateCampfires(fires, dt);
 
     const toCity = world.city.center.clone().sub(new THREE.Vector2(player.position.x, player.position.z));
     if (toCity.length() < world.city.radius + 6) {
       won = true;
       hud.showWin(day.day);
     }
+    const ctx = craftContext();
+    crafting.render(inventory, ctx);
     hud.update({
       hp: player.hp,
-      wood: inventory.wood,
+      hunger: player.hunger,
+      inventory,
       day: day.day,
+      night: day.phase < 0.2 || day.phase > 0.8,
       swimTime: player.swimTime,
       swimming: player.swimming,
       onBoat: player.boat !== null,
       hasBoat: boat !== null,
+      hasTable: tables.length > 0,
+      hasFire: fires.length > 0,
       storm: weather.isStorm,
       cityDistance: toCity.length(),
       cityAngle: Math.atan2(toCity.x, toCity.y) - follow.yaw + Math.PI,
@@ -142,7 +275,8 @@ function animate(): void {
   weather.update(dt, player.position, notify);
   world.sea.position.set(player.position.x, 0, player.position.z);
   seaMaterial.color.lerpColors(CALM_SEA, STORM_SEA, weather.storm);
-  follow.update(dt, player.position, input.axis.x !== 0 || input.axis.z !== 0 ? player.heading : null);
+  const moving = !crafting.open && (input.axis.x !== 0 || input.axis.z !== 0);
+  follow.update(dt, player.position, moving ? player.heading : null);
 
   input.endFrame();
   renderer.render(scene, follow.camera);
@@ -152,6 +286,6 @@ renderer.setAnimationLoop(animate);
 if (import.meta.env.DEV) {
   // Debug hook for scripted testing: window.game in the dev console.
   Object.assign(window, {
-    game: { player, inventory, trees, pirates, weather, world, follow, notify, getBoat: () => boat },
+    game: { player, inventory, trees, rocks, animals, pirates, weather, world, follow, notify, day, craft, RECIPES, getBoat: () => boat, tables, fires },
   });
 }

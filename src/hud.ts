@@ -1,14 +1,18 @@
-import { BOAT_COST } from './boat';
-import { MAX_HP, SWIM_LIMIT } from './player';
+import { MAX_HP, MAX_HUNGER, SWIM_LIMIT } from './player';
+import type { Inventory } from './inventory';
 
 export interface HudState {
   hp: number;
-  wood: number;
+  hunger: number;
+  inventory: Inventory;
   day: number;
+  night: boolean;
   swimTime: number;
   swimming: boolean;
   onBoat: boolean;
   hasBoat: boolean;
+  hasTable: boolean;
+  hasFire: boolean;
   storm: boolean;
   cityDistance: number;
   /** Screen-space angle to the city in radians, 0 = straight up. */
@@ -16,11 +20,14 @@ export interface HudState {
 }
 
 export class Hud {
-  private readonly hp: HTMLElement;
+  private readonly hpText: HTMLElement;
   private readonly hpBar: HTMLElement;
+  private readonly hungerText: HTMLElement;
+  private readonly hungerBar: HTMLElement;
   private readonly swim: HTMLElement;
   private readonly swimBar: HTMLElement;
   private readonly stats: HTMLElement;
+  private readonly items: HTMLElement;
   private readonly hint: HTMLElement;
   private readonly compass: HTMLElement;
   private readonly compassText: HTMLElement;
@@ -28,11 +35,14 @@ export class Hud {
   private readonly overlay: HTMLElement;
 
   constructor() {
-    this.hp = byId('hp');
+    this.hpText = byId('hp-text');
     this.hpBar = byId('hp-bar');
+    this.hungerText = byId('hunger-text');
+    this.hungerBar = byId('hunger-bar');
     this.swim = byId('swim');
     this.swimBar = byId('swim-bar');
     this.stats = byId('stats');
+    this.items = byId('items');
     this.hint = byId('hint');
     this.compass = byId('compass-arrow');
     this.compassText = byId('compass-text');
@@ -51,19 +61,28 @@ export class Hud {
 
   update(s: HudState): void {
     this.hpBar.style.width = `${(s.hp / MAX_HP) * 100}%`;
-    this.hp.title = `${Math.round(s.hp)} / ${MAX_HP}`;
+    this.hpText.textContent = `${Math.ceil(s.hp)} / ${MAX_HP}`;
+    this.hungerBar.style.width = `${(s.hunger / MAX_HUNGER) * 100}%`;
+    this.hungerText.textContent = `${Math.ceil(s.hunger)} / ${MAX_HUNGER}`;
+    this.hungerBar.style.background = s.hunger < 20 ? '#e53935' : '#c98a2b';
 
     this.swim.style.display = s.swimming ? 'block' : 'none';
     const left = Math.max(0, SWIM_LIMIT - s.swimTime);
     this.swimBar.style.width = `${(left / SWIM_LIMIT) * 100}%`;
     this.swimBar.style.background = left < 3 ? '#e53935' : '#29b6f6';
 
-    this.stats.textContent = `Day ${s.day}   Wood: ${s.wood}${s.storm ? '   STORM' : ''}`;
+    this.stats.textContent = `Day ${s.day}${s.night ? ' (night)' : ''}${s.storm ? '   STORM' : ''}`;
+    const inv = s.inventory;
+    const tools = [inv.axe && 'axe', inv.pickaxe && 'pickaxe', inv.sword && 'sword', inv.pot && 'pot'].filter(Boolean).join(', ');
+    this.items.textContent =
+      `Wood ${inv.wood}   Stone ${inv.stone}   Raw meat ${inv.rawMeat}   Cooked meat ${inv.cookedMeat}` +
+      (tools ? `\nTools: ${tools}` : '');
 
     if (s.onBoat) this.hint.textContent = 'Sail with WASD. B near land to go ashore.';
     else if (s.hasBoat) this.hint.textContent = 'Walk to your boat and press B to board.';
-    else if (s.wood >= BOAT_COST) this.hint.textContent = 'Press B to build a boat!';
-    else this.hint.textContent = `Hit trees with E for wood (${s.wood}/${BOAT_COST} for a boat).`;
+    else if (!s.hasTable) this.hint.textContent = 'Hit trees (E) for wood, then press C to craft a crafting table.';
+    else if (!s.hasFire) this.hint.textContent = 'Hit rocks for stone. Craft a campfire and a pot to cook meat.';
+    else this.hint.textContent = 'Craft a boat at the table (12 wood + 2 stone) and sail to the city.';
 
     this.compass.style.transform = `rotate(${s.cityAngle}rad)`;
     this.compassText.textContent = `City ${Math.round(s.cityDistance)} m`;

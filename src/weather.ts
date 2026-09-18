@@ -9,7 +9,7 @@ export class Weather {
   /** 0 = clear, 1 = full storm (eases in and out). */
   storm = 0;
   private active = false;
-  private timer = 45 + Math.random() * 60;
+  private timer = 120 + Math.random() * 120;
   private readonly rain: THREE.Points;
   private readonly positions: Float32Array;
   private readonly material: THREE.PointsMaterial;
@@ -44,7 +44,7 @@ export class Weather {
         this.targetWind.set(Math.cos(a) * 5, 0, Math.sin(a) * 5);
         notify('A storm is rolling in!');
       } else {
-        this.timer = 60 + Math.random() * 90;
+        this.timer = 240 + Math.random() * 240;
         this.targetWind.set(0, 0, 0);
         notify('The storm has passed.');
       }

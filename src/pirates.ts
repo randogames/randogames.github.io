@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Player } from './player';
 import type { Island, World } from './world';
+import { buildHuman, poseHuman, type Human } from './human';
 
 const PIRATE_HP = 3;
 const PIRATE_SPEED = 4.5;
@@ -11,16 +12,18 @@ const RAID_SIZE = 3;
 
 interface Pirate {
   readonly group: THREE.Group;
+  readonly human: Human;
   hp: number;
   cooldown: number;
+  walk: number;
+  swing: number;
 }
 
-const bodyMat = new THREE.MeshStandardMaterial({ color: 0x8b0000 });
 const hatMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
 
 /** Every so often a pirate ship arrives at your island and its crew comes for you. */
 export class Pirates {
-  private raidTimer = 50;
+  private raidTimer = 150;
   private ship: THREE.Group | null = null;
   private leaving = 0;
   private pirates: Pirate[] = [];
@@ -43,11 +46,12 @@ export class Pirates {
 
     if (this.ship && this.pirates.length === 0) {
       this.leaving += dt;
-      this.ship.translateZ(-6 * dt);
-      if (this.leaving > 8) {
+      // Local +Z points away from the island, so this sails out to sea.
+      this.ship.translateZ(6 * dt);
+      if (this.leaving > 10) {
         this.scene.remove(this.ship);
         this.ship = null;
-        this.raidTimer = 90 + Math.random() * 60;
+        this.raidTimer = 240 + Math.random() * 180;
       }
       return;
     }
@@ -64,18 +68,24 @@ export class Pirates {
 
     for (const p of this.pirates) {
       p.cooldown = Math.max(0, p.cooldown - dt);
+      p.swing = Math.max(0, p.swing - dt);
       const toPlayer = player.position.clone().sub(p.group.position);
       toPlayer.y = 0;
       const dist = toPlayer.length();
-      if (dist > ATTACK_RANGE * 0.8) {
+      const chasing = dist > ATTACK_RANGE * 0.8;
+      if (chasing) {
         toPlayer.normalize();
         p.group.position.addScaledVector(toPlayer, PIRATE_SPEED * dt);
         p.group.rotation.y = Math.atan2(toPlayer.x, toPlayer.z);
+        p.walk += dt * PIRATE_SPEED * 1.6;
       }
       const ground = this.world.heightAt(p.group.position.x, p.group.position.z);
-      p.group.position.y = Math.max(ground, 0) + 0.8;
+      const swimming = ground < 0;
+      p.group.position.y = swimming ? 0.35 : ground + 0.8;
+      poseHuman(p.human, { walk: p.walk, moving: chasing, sneaking: false, swimming, swing: p.swing / 0.3 });
       if (dist <= ATTACK_RANGE && p.cooldown === 0 && !player.boat) {
         p.cooldown = ATTACK_COOLDOWN;
+        p.swing = 0.3;
         player.damage(ATTACK_DAMAGE);
         if (player.hp === 100 && player.position.distanceTo(p.group.position) > 20) {
           // Player just respawned somewhere else; raid ends.
@@ -88,7 +98,20 @@ export class Pirates {
   }
 
   /** Hit the nearest pirate within range. Returns true if one was hit, plus wood if it was defeated. */
-  hit(from: THREE.Vector3, range: number): { hit: boolean; defeated: boolean } {
+  nearestAlive(from: THREE.Vector3): THREE.Vector3 | null {
+    let best: THREE.Vector3 | null = null;
+    let bestDist = Infinity;
+    for (const p of this.pirates) {
+      const d = p.group.position.distanceTo(from);
+      if (d < bestDist) {
+        bestDist = d;
+        best = p.group.position;
+      }
+    }
+    return best;
+  }
+
+  hit(from: THREE.Vector3, range: number, damage: number): { hit: boolean; defeated: boolean } {
     let best: Pirate | null = null;
     let bestDist = range;
     for (const p of this.pirates) {
@@ -99,7 +122,7 @@ export class Pirates {
       }
     }
     if (!best) return { hit: false, defeated: false };
-    best.hp -= 1;
+    best.hp -= damage;
     const push = best.group.position.clone().sub(from).setY(0).normalize().multiplyScalar(1.5);
     best.group.position.add(push);
     if (best.hp <= 0) {
@@ -125,24 +148,32 @@ export class Pirates {
     this.leaving = 0;
 
     for (let i = 0; i < RAID_SIZE; i++) {
-      const group = buildPirate();
+      const human = buildPirate();
       const side = (i - 1) * 2.5;
-      group.position.set(shipPos.x + out.y * side, 0.8, shipPos.y - out.x * side);
-      this.scene.add(group);
-      this.pirates.push({ group, hp: PIRATE_HP, cooldown: 1.5 });
+      human.group.position.set(shipPos.x + out.y * side, 0.8, shipPos.y - out.x * side);
+      this.scene.add(human.group);
+      this.pirates.push({ group: human.group, human, hp: PIRATE_HP, cooldown: 1.5, walk: 0, swing: 0 });
     }
     notify('Pirates! A ship has landed on your island. Hit them with E.');
   }
 }
 
-function buildPirate(): THREE.Group {
-  const group = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 0.8, 4, 8), bodyMat);
-  body.castShadow = true;
-  const hat = new THREE.Mesh(new THREE.ConeGeometry(0.5, 0.5, 8), hatMat);
-  hat.position.y = 1;
-  group.add(body, hat);
-  return group;
+function buildPirate(): Human {
+  const human = buildHuman({ shirt: 0x8b0000, pants: 0x1a1a1a, hair: 0x111111 });
+  const hat = new THREE.Mesh(new THREE.ConeGeometry(0.34, 0.35, 8), hatMat);
+  hat.position.y = 1.2;
+  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.04, 12), hatMat);
+  brim.position.y = 1.05;
+  const patch = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 0.03), hatMat);
+  patch.position.set(0.08, 0.93, 0.21);
+  const cutlass = new THREE.Mesh(
+    new THREE.BoxGeometry(0.05, 0.7, 0.12),
+    new THREE.MeshStandardMaterial({ color: 0xc0c0c0, metalness: 0.8, roughness: 0.3 }),
+  );
+  cutlass.position.set(0, -0.9, 0.1);
+  human.rightArm.add(cutlass);
+  human.group.add(hat, brim, patch);
+  return human;
 }
 
 function buildShip(): THREE.Group {

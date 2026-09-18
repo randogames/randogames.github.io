@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-export const DAY_LENGTH = 75; // real seconds per in-game day
+export const DAY_LENGTH = 160; // real seconds per in-game day
 
 const NIGHT = new THREE.Color(0x0a1230);
 const DAWN = new THREE.Color(0xf0a060);

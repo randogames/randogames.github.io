@@ -2,41 +2,49 @@ import * as THREE from 'three';
 import type { Input } from './input';
 import type { World } from './world';
 import type { Boat } from './boat';
+import { buildHuman, poseHuman, type Human } from './human';
 
 const WALK_SPEED = 8;
 const SNEAK_SPEED = 3;
 const SWIM_SPEED = 4;
 const JUMP_SPEED = 8;
 const GRAVITY = 22;
-const EYE = 0.8; // capsule center above the ground
+const HIP = 0.8; // hips above the ground
 const SWIM_Y = 0.35;
 export const SWIM_LIMIT = 10;
 export const MAX_HP = 100;
+export const MAX_HUNGER = 100;
+const HUNGER_IDLE = 0.12; // per second
+const HUNGER_WALK = 0.55;
+const HUNGER_SWIM = 1.1;
+const STARVE_DAMAGE = 3; // hp per second at zero hunger
+const REGEN_HUNGER = 80; // hunger needed before health regenerates
+const REGEN_RATE = 4; // hp per second at full hunger
 
 export type Notify = (message: string) => void;
 
 export class Player {
-  readonly mesh: THREE.Mesh;
+  readonly group: THREE.Group;
   hp = MAX_HP;
+  hunger = MAX_HUNGER;
   swimTime = 0;
   boat: Boat | null = null;
   heading = Math.PI;
+  private readonly human: Human;
   private vy = 0;
   private grounded = true;
   private swing = 0;
+  private walk = 0;
 
   constructor(scene: THREE.Scene, private readonly world: World, private readonly notify: Notify) {
-    this.mesh = new THREE.Mesh(
-      new THREE.CapsuleGeometry(0.4, 0.8, 4, 8),
-      new THREE.MeshStandardMaterial({ color: 0xe25822 }),
-    );
-    this.mesh.castShadow = true;
-    scene.add(this.mesh);
+    this.human = buildHuman({ shirt: 0x2f80c2, pants: 0x3b3b5c, hair: 0x4a2e1a });
+    this.group = this.human.group;
+    scene.add(this.group);
     this.respawn();
   }
 
   get position(): THREE.Vector3 {
-    return this.mesh.position;
+    return this.group.position;
   }
 
   get onLand(): boolean {
@@ -49,54 +57,59 @@ export class Player {
 
   respawn(): void {
     const home = this.world.home;
-    this.mesh.position.set(home.center.x, home.height + EYE, home.center.y);
+    this.group.position.set(home.center.x, home.height + HIP, home.center.y);
     this.hp = MAX_HP;
+    this.hunger = MAX_HUNGER;
     this.swimTime = 0;
     this.vy = 0;
     this.boat = null;
-    this.mesh.scale.setScalar(1);
+    this.group.scale.setScalar(1);
+    this.group.rotation.x = 0;
   }
 
-  damage(amount: number): void {
+  damage(amount: number, cause = 'The pirates got you.'): void {
     this.hp -= amount;
     if (this.hp <= 0) {
-      this.notify('The pirates got you. You wake up on your home island.');
+      this.notify(`${cause} You wake up on your home island.`);
       this.respawn();
     }
   }
 
+  /** Restore hunger by eating. */
+  eat(amount: number): void {
+    this.hunger = Math.min(MAX_HUNGER, this.hunger + amount);
+  }
+
   /** Brief swing animation when hitting something. */
   swingArm(): void {
-    this.swing = 0.25;
+    this.swing = 0.3;
   }
 
   update(dt: number, input: Input, moveDir: THREE.Vector3, wind: THREE.Vector3, storm: number): void {
-    if (this.swing > 0) {
-      this.swing -= dt;
-      this.mesh.rotation.x = Math.sin(this.swing * 25) * 0.5;
-    } else {
-      this.mesh.rotation.x = 0;
-    }
+    this.swing = Math.max(0, this.swing - dt);
+    const moving = moveDir.lengthSq() > 0;
 
     if (this.boat) {
       this.boat.drive(dt, moveDir, wind, this.world, storm);
-      this.mesh.position.copy(this.boat.position).add(new THREE.Vector3(0, 1.1, 0));
+      this.group.position.copy(this.boat.position).add(new THREE.Vector3(0, 1.2, 0));
       this.heading = this.boat.heading;
-      this.mesh.rotation.y = this.heading;
+      this.group.rotation.y = this.heading;
+      this.drainHunger(dt, HUNGER_IDLE);
+      this.regenerate(dt);
+      poseHuman(this.human, { walk: this.walk, moving: false, sneaking: false, swimming: false, swing: this.swing / 0.3 });
       return;
     }
 
-    const moving = moveDir.lengthSq() > 0;
     if (moving) {
       this.heading = Math.atan2(moveDir.x, moveDir.z);
-      this.mesh.rotation.y = this.heading;
+      this.group.rotation.y = this.heading;
     }
 
     const groundHere = this.world.heightAt(this.position.x, this.position.z);
     const inWater = groundHere < 0;
     const sneaking = input.sneaking && !inWater;
     const speed = inWater ? SWIM_SPEED : sneaking ? SNEAK_SPEED : WALK_SPEED;
-    this.mesh.scale.y = sneaking ? 0.65 : 1;
+    if (moving) this.walk += dt * speed * 1.6;
 
     const next = this.position.clone().addScaledVector(moveDir, speed * dt);
     if (inWater) next.addScaledVector(wind, dt * 0.5);
@@ -104,7 +117,11 @@ export class Player {
     this.position.z = next.z;
 
     const ground = this.world.heightAt(this.position.x, this.position.z);
-    if (ground < 0) {
+    const swimming = ground < 0;
+    poseHuman(this.human, { walk: this.walk, moving, sneaking, swimming, swing: this.swing / 0.3 });
+    this.drainHunger(dt, swimming ? HUNGER_SWIM : moving ? HUNGER_WALK : HUNGER_IDLE);
+
+    if (swimming) {
       this.swimTime += dt * (1 + storm);
       if (this.position.y > SWIM_Y + 0.05) {
         this.vy -= GRAVITY * dt;
@@ -122,9 +139,9 @@ export class Player {
     }
 
     this.swimTime = Math.max(0, this.swimTime - dt * 2);
-    this.hp = Math.min(MAX_HP, this.hp + 2 * dt);
+    this.regenerate(dt);
 
-    const floor = ground + EYE;
+    const floor = ground + HIP;
     if (this.grounded && input.jump) {
       this.vy = JUMP_SPEED;
       this.grounded = false;
@@ -140,5 +157,18 @@ export class Player {
     } else {
       this.position.y = floor;
     }
+  }
+
+  /** Health comes back when you're well fed, fastest at full hunger. Regenerating costs a little hunger. */
+  private regenerate(dt: number): void {
+    if (this.hunger < REGEN_HUNGER || this.hp >= MAX_HP) return;
+    const strength = (this.hunger - REGEN_HUNGER) / (MAX_HUNGER - REGEN_HUNGER); // 0..1
+    this.hp = Math.min(MAX_HP, this.hp + REGEN_RATE * (0.5 + strength * 0.5) * dt);
+    this.hunger -= 0.4 * dt;
+  }
+
+  private drainHunger(dt: number, rate: number): void {
+    this.hunger = Math.max(0, this.hunger - rate * dt);
+    if (this.hunger <= 0) this.damage(STARVE_DAMAGE * dt, 'You starved.');
   }
 }
