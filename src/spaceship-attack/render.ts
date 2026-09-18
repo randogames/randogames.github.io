@@ -98,7 +98,67 @@ export function draw(ctx: CanvasRenderingContext2D, scale: number, g: GameState,
   }
 
   drawHud(ctx, g);
+  drawHealAbility(ctx, g);
   if (g.boss && !g.boss.entering) drawBossBar(ctx, g);
+}
+
+/**
+ * The heal ability, shown as its own slot so it reads as an ability rather
+ * than a line of stats: green and lit when it can be used, dim otherwise.
+ */
+function drawHealAbility(ctx: CanvasRenderingContext2D, g: GameState): void {
+  const cost = Math.ceil(g.loadout.maxAmmo * HEAL_AMMO_SHARE);
+  const hurt = g.hull < MAX_HULL;
+  const affordable = g.loadout.ammo >= cost;
+  const ready = hurt && affordable;
+
+  const w = 116;
+  const h = 46;
+  const x = 12;
+  // Clear of the control hints printed along the bottom of the page.
+  const y = VIEW_HEIGHT - h - 48;
+
+  ctx.save();
+  // A brief pulse right after healing.
+  const pulse = g.healFlash > 0 ? g.healFlash / 0.6 : 0;
+  ctx.fillStyle = ready ? 'rgba(20, 70, 48, .85)' : 'rgba(12, 18, 28, .72)';
+  ctx.strokeStyle = pulse > 0
+    ? `rgba(160, 255, 200, ${0.5 + pulse * 0.5})`
+    : ready
+      ? '#7dffb0'
+      : 'rgba(255,255,255,.22)';
+  ctx.lineWidth = ready ? 2 : 1.5;
+  roundRect(ctx, x, y, w, h, 9);
+  ctx.fill();
+  ctx.stroke();
+
+  // Key cap.
+  ctx.fillStyle = ready ? '#7dffb0' : 'rgba(238,243,248,.5)';
+  ctx.font = '700 17px system-ui, sans-serif';
+  ctx.fillText('H', x + 11, y + 8);
+
+  ctx.font = '700 13px system-ui, sans-serif';
+  ctx.fillText('HEAL', x + 32, y + 7);
+
+  ctx.font = '12px system-ui, sans-serif';
+  ctx.fillStyle = affordable ? 'rgba(238,243,248,.8)' : '#ff8a80';
+  ctx.fillText(`${cost} ammo`, x + 32, y + 25);
+
+  if (!hurt && affordable) {
+    ctx.fillStyle = 'rgba(238,243,248,.45)';
+    ctx.fillText('hull full', x + 11, y + 25);
+  }
+  ctx.restore();
+}
+
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
 }
 
 /** Boss name and health across the top of the screen. */
@@ -138,10 +198,6 @@ function drawHud(ctx: CanvasRenderingContext2D, g: GameState): void {
   ctx.fillStyle = '#eef3f8';
   const skinBonus = currentSkin(g).damageBonus;
   ctx.fillText(`Cannons ${g.loadout.guns}   Damage ${g.loadout.damage + skinBonus}`, 12, 64);
-  const healCost = Math.ceil(g.loadout.maxAmmo * HEAL_AMMO_SHARE);
-  ctx.fillStyle = g.hull < MAX_HULL && g.loadout.ammo >= healCost ? '#7dffb0' : 'rgba(238,243,248,.55)';
-  ctx.fillText(`H repair: full hull for ${healCost} ammo`, 12, 82);
-  ctx.fillStyle = '#eef3f8';
 
   ctx.textAlign = 'right';
   ctx.fillText(`${g.mode.name} mode   ${currentSkin(g).name}`, VIEW_WIDTH - 12, 12);

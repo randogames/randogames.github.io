@@ -38,7 +38,7 @@ export class Input {
     return this.isDown('ShiftLeft', 'ShiftRight');
   }
 
-  /** Repair ability: spends ammo to refill the hull. */
+  /** Heal ability: spends ammo to restore the hull to full. */
   get healPressed(): boolean {
     return this.wasPressed('KeyH');
   }

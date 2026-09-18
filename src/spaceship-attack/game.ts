@@ -300,7 +300,7 @@ function fire(g: GameState, notify: Notify): void {
   if (per !== null && g.shotsFired % per === 0) grantUpgrade(g, notify);
 }
 
-/** Spends a fifth of the full magazine to bring the hull back to full. */
+/** Heal ability: spends a fifth of the full magazine to restore the hull to full. */
 function heal(g: GameState, notify: Notify): void {
   const cost = Math.ceil(g.loadout.maxAmmo * HEAL_AMMO_SHARE);
   if (g.hull >= MAX_HULL) {
@@ -308,13 +308,13 @@ function heal(g: GameState, notify: Notify): void {
     return;
   }
   if (g.loadout.ammo < cost) {
-    notify(`Repair needs ${cost} ammo. You have ${g.loadout.ammo}.`);
+    notify(`Healing needs ${cost} ammo. You have ${g.loadout.ammo}.`);
     return;
   }
   g.loadout.ammo -= cost;
   g.hull = MAX_HULL;
   g.healFlash = 0.6;
-  notify(`Hull repaired. Spent ${cost} ammo.`);
+  notify(`Healed to full hull. Spent ${cost} ammo.`);
 }
 
 function damage(g: GameState, amount: number): void {

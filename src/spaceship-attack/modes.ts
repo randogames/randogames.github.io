@@ -51,6 +51,6 @@ export function chooseMode(): Promise<Mode> {
     modePickerElement(),
     'Spaceship Attack',
     MODES,
-    'A / D or arrows move &middot; W / S climb and dive &middot; <b>press Space to fire one aimed shot</b> &middot; Shift boosts &middot; H repairs the hull for ammo',
+    'A / D or arrows move &middot; W / S climb and dive &middot; <b>press Space to fire one aimed shot</b> &middot; Shift boosts &middot; <b>H heals you to full hull</b> for a fifth of your ammo',
   );
 }
