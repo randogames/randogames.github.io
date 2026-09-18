@@ -43,6 +43,11 @@ export class Input {
     return this.wasPressed('KeyH');
   }
 
+  /** Missile ability: launches a homing missile. */
+  get missilePressed(): boolean {
+    return this.wasPressed('KeyM');
+  }
+
   isDown(...codes: string[]): boolean {
     return codes.some((c) => this.held.has(c));
   }
@@ -54,6 +59,11 @@ export class Input {
   /** Test helper: pretend Space was pressed this frame. */
   forceFire(): void {
     this.pressed.add('Space');
+  }
+
+  /** Test helper: pretend any key was pressed this frame. */
+  forceKey(code: string): void {
+    this.pressed.add(code);
   }
 
   endFrame(): void {

@@ -1,6 +1,6 @@
 import { installUpdateBanner } from '../shared/update-banner';
 import { chooseMode } from './modes';
-import { bossDueAt, bossKind } from './bosses';
+import { bossDueAt, bossHp } from './bosses';
 import { installHomeButton } from '../shared/home-button';
 import { Input } from './input';
 import { Starfield } from './starfield';
@@ -81,8 +81,9 @@ if (import.meta.env.DEV) {
     __step: () => update(game, 1 / 60, input, notify),
     __skin: () => currentSkin(game).name,
     __grantUpgrade: () => grantUpgrade(game, notify),
+    __missile: () => { input.forceKey('KeyM'); update(game, 1 / 60, input, notify); input.endFrame(); },
     __shotDamage: () => shotDamage(game),
-    __bossHp: (tier: number) => bossKind(tier).hp,
+    __bossHp: (tier: number) => bossHp(tier),
     __bossDueAt: (tier: number, kpm: number) => bossDueAt(tier, kpm),
     __fire: () => { input.forceFire(); update(game, 1 / 60, input, notify); input.endFrame(); },
   });

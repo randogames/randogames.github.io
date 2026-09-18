@@ -1,13 +1,14 @@
 import { VIEW_WIDTH, clamp } from './world';
 import { spawnEnemy, type Boss, type Bullet, type Enemy } from './entities';
 
-export const FINAL_BOSS_TIER = 5;
+/** How many bosses a full run contains. Beating the last one wins. */
+export const FINAL_BOSS_TIER = 12;
 
-/** The first boss shows up around here, then roughly every four minutes. */
-const FIRST_BOSS_SECONDS = 90;
-const BOSS_INTERVAL_SECONDS = 240;
+/** The first boss shows up around here, then roughly one a minute. */
+const FIRST_BOSS_SECONDS = 60;
+const BOSS_INTERVAL_SECONDS = 60;
 /** How much doing well or badly can shift a boss's arrival. */
-const PACE_SWING_SECONDS = 30;
+const PACE_SWING_SECONDS = 12;
 const FAST_KILLS_PER_MINUTE = 26;
 const SLOW_KILLS_PER_MINUTE = 10;
 
@@ -38,33 +39,51 @@ interface BossKind {
 }
 
 /**
- * Hit points are counted in plain, un-upgraded bullets: 50, 100, 200, 400, 800.
- * Upgrades and skins make each press hit harder, so later bosses stay winnable.
+ * The roster cycles as the run goes on, so a twelve boss run keeps varying its
+ * attacks. Each boss is deliberately modest: the strength comes from how many
+ * of them there are, not from any single one being a wall.
  */
 export const BOSS_KINDS: readonly BossKind[] = [
-  { name: 'Sentinel', hp: 50, radius: 42, color: '#7f8c8d', speed: 55, fireEvery: 1.6, attack: 'fan' },
-  { name: 'Hive Mother', hp: 100, radius: 46, color: '#27ae60', speed: 45, fireEvery: 2.2, attack: 'hive' },
-  { name: 'Lancer', hp: 200, radius: 38, color: '#2980b9', speed: 120, fireEvery: 1.1, attack: 'aimed' },
-  { name: 'Fortress', hp: 400, radius: 54, color: '#8e44ad', speed: 35, fireEvery: 1.4, attack: 'sweep' },
-  { name: 'Dreadnought', hp: 800, radius: 58, color: '#c0392b', speed: 70, fireEvery: 0.9, attack: 'storm' },
+  { name: 'Sentinel', hp: 30, radius: 40, color: '#7f8c8d', speed: 55, fireEvery: 1.8, attack: 'fan' },
+  { name: 'Hive Mother', hp: 34, radius: 44, color: '#27ae60', speed: 45, fireEvery: 2.4, attack: 'hive' },
+  { name: 'Lancer', hp: 30, radius: 36, color: '#2980b9', speed: 120, fireEvery: 1.3, attack: 'aimed' },
+  { name: 'Fortress', hp: 40, radius: 50, color: '#8e44ad', speed: 35, fireEvery: 1.6, attack: 'sweep' },
+  { name: 'Dreadnought', hp: 44, radius: 54, color: '#c0392b', speed: 70, fireEvery: 1.1, attack: 'storm' },
 ];
 
+/** Later bosses in the run are a little tougher than the same kind was earlier. */
+const HP_PER_TIER = 22;
+
 export function bossKind(tier: number): BossKind {
-  return BOSS_KINDS[clamp(tier - 1, 0, BOSS_KINDS.length - 1)]!;
+  const index = (Math.max(1, tier) - 1) % BOSS_KINDS.length;
+  return BOSS_KINDS[index]!;
+}
+
+/** Hit points in plain, un-upgraded bullets. */
+export function bossHp(tier: number): number {
+  return bossKind(tier).hp + (tier - 1) * HP_PER_TIER;
+}
+
+/** The roster repeats, so later passes are marked: Sentinel, then Sentinel II. */
+export function bossName(tier: number): string {
+  const pass = Math.floor((tier - 1) / BOSS_KINDS.length);
+  const suffix = pass === 0 ? '' : ` ${'I'.repeat(pass + 1)}`;
+  return `${bossKind(tier).name}${suffix}`;
 }
 
 export function spawnBoss(tier: number): Boss {
   const kind = bossKind(tier);
+  const hp = bossHp(tier);
   return {
     tier,
-    name: kind.name,
+    name: bossName(tier),
     x: VIEW_WIDTH / 2,
     y: -kind.radius,
-    hp: kind.hp,
-    maxHp: kind.hp,
+    hp,
+    maxHp: hp,
     radius: kind.radius,
     color: kind.color,
-    scoreValue: 500 * tier,
+    scoreValue: 300 * tier,
     vx: kind.speed,
     phase: 0,
     fireTimer: 1.2,

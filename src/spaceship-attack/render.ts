@@ -1,8 +1,8 @@
 import { VIEW_HEIGHT, VIEW_WIDTH } from './world';
 import { MAX_HULL } from './entities';
 import { HEAL_AMMO_SHARE } from './game';
-import { drawBoss, drawBullet, drawEnemy, drawPickup, drawPlayer } from './sprites';
-import { currentSkin, secondsToNextBoss } from './game';
+import { drawBoss, drawBullet, drawEnemy, drawMissile, drawPickup, drawPlayer } from './sprites';
+import { ammoDropChance, burstLeft, currentSkin, secondsToNextBoss } from './game';
 import type { Starfield } from './starfield';
 import type { GameState } from './game';
 
@@ -39,6 +39,13 @@ export function draw(ctx: CanvasRenderingContext2D, scale: number, g: GameState,
     ctx.save();
     ctx.translate(b.x, b.y);
     drawBullet(ctx, b.hostile, skin);
+    ctx.restore();
+  }
+
+  for (const m of g.missiles) {
+    ctx.save();
+    ctx.translate(m.x, m.y);
+    drawMissile(ctx, m.heading, m.trail);
     ctx.restore();
   }
 
@@ -98,56 +105,113 @@ export function draw(ctx: CanvasRenderingContext2D, scale: number, g: GameState,
   }
 
   drawHud(ctx, g);
-  drawHealAbility(ctx, g);
+  drawAbilities(ctx, g);
   if (g.boss && !g.boss.entering) drawBossBar(ctx, g);
 }
 
-/**
- * The heal ability, shown as its own slot so it reads as an ability rather
- * than a line of stats: green and lit when it can be used, dim otherwise.
- */
-function drawHealAbility(ctx: CanvasRenderingContext2D, g: GameState): void {
-  const cost = Math.ceil(g.loadout.maxAmmo * HEAL_AMMO_SHARE);
+/** Five pips showing how much of the burst is left, and the reload sweep. */
+function drawBurstPips(ctx: CanvasRenderingContext2D, g: GameState): void {
+  const left = burstLeft(g);
+  const size = g.loadout.burstSize;
+  const pip = 10;
+  const gap = 4;
+  for (let i = 0; i < size; i++) {
+    const x = 12 + i * (pip + gap);
+    const y = 64;
+    ctx.fillStyle = i < left ? '#7ef9ff' : 'rgba(255,255,255,.18)';
+    ctx.fillRect(x, y, pip, pip);
+  }
+  if (g.reloadLeft > 0) {
+    const fraction = 1 - g.reloadLeft / g.loadout.reloadSeconds;
+    const width = size * (pip + gap) - gap;
+    ctx.fillStyle = 'rgba(255, 213, 79, .85)';
+    ctx.fillRect(12, 76, width * fraction, 3);
+    ctx.fillStyle = 'rgba(255, 213, 79, .9)';
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.fillText('reloading', 12 + width + 8, 64);
+    ctx.font = '600 13px system-ui, sans-serif';
+  }
+}
+
+/** Ability slots along the bottom: heal and missile, each with its own state. */
+function drawAbilities(ctx: CanvasRenderingContext2D, g: GameState): void {
+  const healCost = Math.ceil(g.loadout.maxAmmo * HEAL_AMMO_SHARE);
   const hurt = g.hull < MAX_HULL;
-  const affordable = g.loadout.ammo >= cost;
-  const ready = hurt && affordable;
+  const canAffordHeal = g.loadout.ammo >= healCost;
+  const y = VIEW_HEIGHT - 46 - 48;
 
-  const w = 116;
+  drawSlot(ctx, {
+    x: 12,
+    y,
+    key: 'H',
+    label: 'HEAL',
+    detail: !hurt ? 'hull full' : `${healCost} ammo`,
+    ready: hurt && canAffordHeal,
+    warn: hurt && !canAffordHeal,
+    pulse: g.healFlash > 0 ? g.healFlash / 0.6 : 0,
+    progress: 1,
+    tint: '#7dffb0',
+  });
+
+  const missileReady = g.missileLeft === 0;
+  drawSlot(ctx, {
+    x: 138,
+    y,
+    key: 'M',
+    label: 'MISSILE',
+    detail: missileReady ? 'ready' : `${Math.ceil(g.missileLeft)}s`,
+    ready: missileReady,
+    warn: false,
+    pulse: 0,
+    progress: missileReady ? 1 : 1 - g.missileLeft / g.loadout.missileCooldown,
+    tint: '#ffca57',
+  });
+}
+
+interface SlotStyle {
+  x: number;
+  y: number;
+  key: string;
+  label: string;
+  detail: string;
+  ready: boolean;
+  warn: boolean;
+  pulse: number;
+  /** 0 to 1, drawn as a filling bar while the ability recharges. */
+  progress: number;
+  tint: string;
+}
+
+function drawSlot(ctx: CanvasRenderingContext2D, s: SlotStyle): void {
+  const w = 118;
   const h = 46;
-  const x = 12;
-  // Clear of the control hints printed along the bottom of the page.
-  const y = VIEW_HEIGHT - h - 48;
-
   ctx.save();
-  // A brief pulse right after healing.
-  const pulse = g.healFlash > 0 ? g.healFlash / 0.6 : 0;
-  ctx.fillStyle = ready ? 'rgba(20, 70, 48, .85)' : 'rgba(12, 18, 28, .72)';
-  ctx.strokeStyle = pulse > 0
-    ? `rgba(160, 255, 200, ${0.5 + pulse * 0.5})`
-    : ready
-      ? '#7dffb0'
+  ctx.fillStyle = s.ready ? 'rgba(18, 32, 44, .9)' : 'rgba(12, 18, 28, .72)';
+  ctx.strokeStyle = s.pulse > 0
+    ? `rgba(255,255,255,${0.5 + s.pulse * 0.5})`
+    : s.ready
+      ? s.tint
       : 'rgba(255,255,255,.22)';
-  ctx.lineWidth = ready ? 2 : 1.5;
-  roundRect(ctx, x, y, w, h, 9);
+  ctx.lineWidth = s.ready ? 2 : 1.5;
+  roundRect(ctx, s.x, s.y, w, h, 9);
   ctx.fill();
   ctx.stroke();
 
-  // Key cap.
-  ctx.fillStyle = ready ? '#7dffb0' : 'rgba(238,243,248,.5)';
+  if (s.progress < 1) {
+    ctx.fillStyle = 'rgba(255,255,255,.14)';
+    ctx.fillRect(s.x + 2, s.y + h - 6, (w - 4) * s.progress, 3);
+  }
+
+  ctx.fillStyle = s.ready ? s.tint : 'rgba(238,243,248,.5)';
   ctx.font = '700 17px system-ui, sans-serif';
-  ctx.fillText('H', x + 11, y + 8);
+  ctx.fillText(s.key, s.x + 11, s.y + 8);
 
   ctx.font = '700 13px system-ui, sans-serif';
-  ctx.fillText('HEAL', x + 32, y + 7);
+  ctx.fillText(s.label, s.x + 32, s.y + 7);
 
   ctx.font = '12px system-ui, sans-serif';
-  ctx.fillStyle = affordable ? 'rgba(238,243,248,.8)' : '#ff8a80';
-  ctx.fillText(`${cost} ammo`, x + 32, y + 25);
-
-  if (!hurt && affordable) {
-    ctx.fillStyle = 'rgba(238,243,248,.45)';
-    ctx.fillText('hull full', x + 11, y + 25);
-  }
+  ctx.fillStyle = s.warn ? '#ff8a80' : 'rgba(238,243,248,.8)';
+  ctx.fillText(s.detail, s.x + 32, s.y + 25);
   ctx.restore();
 }
 
@@ -196,8 +260,12 @@ function drawHud(ctx: CanvasRenderingContext2D, g: GameState): void {
   ctx.fillStyle = g.loadout.ammo === 0 ? '#e53935' : '#eef3f8';
   ctx.fillText(`Ammo ${g.loadout.ammo}/${g.loadout.maxAmmo}`, 12, 46);
   ctx.fillStyle = '#eef3f8';
+  drawBurstPips(ctx, g);
   const skinBonus = currentSkin(g).damageBonus;
-  ctx.fillText(`Cannons ${g.loadout.guns}   Damage ${g.loadout.damage + skinBonus}`, 12, 64);
+  ctx.fillText(`Cannons ${g.loadout.guns}   Damage ${g.loadout.damage + skinBonus}`, 12, 82);
+  ctx.fillStyle = 'rgba(238,243,248,.65)';
+  ctx.fillText(`Ammo drops ${Math.round(ammoDropChance(g) * 100)}%`, 12, 100);
+  ctx.fillStyle = '#eef3f8';
 
   ctx.textAlign = 'right';
   ctx.fillText(`${g.mode.name} mode   ${currentSkin(g).name}`, VIEW_WIDTH - 12, 12);

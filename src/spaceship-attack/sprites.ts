@@ -133,27 +133,28 @@ export function drawBoss(
   ctx.strokeStyle = 'rgba(255,255,255,.55)';
   ctx.lineWidth = 2.5;
 
-  if (tier === 2 || tier === 4) ctx.rotate(Math.sin(phase * 0.6) * 0.12);
+  const shape = ((tier - 1) % 5) + 1;
+  if (shape === 2 || shape === 4) ctx.rotate(Math.sin(phase * 0.6) * 0.12);
 
   ctx.beginPath();
-  if (tier === 1) {
+  if (shape === 1) {
     ctx.moveTo(-radius, -radius * 0.3);
     ctx.lineTo(0, radius * 0.75);
     ctx.lineTo(radius, -radius * 0.3);
     ctx.lineTo(radius * 0.5, -radius * 0.7);
     ctx.lineTo(-radius * 0.5, -radius * 0.7);
-  } else if (tier === 2) {
+  } else if (shape === 2) {
     for (let i = 0; i < 6; i++) {
       const a = (i / 6) * Math.PI * 2 + Math.PI / 6;
       ctx.lineTo(Math.cos(a) * radius, Math.sin(a) * radius * 0.8);
     }
-  } else if (tier === 3) {
+  } else if (shape === 3) {
     ctx.moveTo(0, radius);
     ctx.lineTo(-radius * 0.8, -radius * 0.2);
     ctx.lineTo(-radius * 0.3, -radius * 0.8);
     ctx.lineTo(radius * 0.3, -radius * 0.8);
     ctx.lineTo(radius * 0.8, -radius * 0.2);
-  } else if (tier === 4) {
+  } else if (shape === 4) {
     ctx.rect(-radius, -radius * 0.6, radius * 2, radius * 1.2);
   } else {
     ctx.moveTo(0, radius);
@@ -175,7 +176,7 @@ export function drawBoss(
   ctx.arc(0, 0, radius * 0.24, 0, Math.PI * 2);
   ctx.fill();
 
-  if (tier >= 3) {
+  if (shape >= 3) {
     ctx.fillStyle = 'rgba(20,20,26,.9)';
     for (const x of [-radius * 0.62, radius * 0.62]) {
       ctx.beginPath();
@@ -240,6 +241,50 @@ export function drawBullet(ctx: CanvasRenderingContext2D, hostile: boolean, skin
       break;
   }
   ctx.shadowBlur = 0;
+}
+
+/** Homing missile with a short exhaust trail. */
+export function drawMissile(ctx: CanvasRenderingContext2D, heading: number, trail: number): void {
+  ctx.save();
+  ctx.rotate(heading);
+
+  const flare = 8 + Math.random() * 6;
+  const grad = ctx.createLinearGradient(0, 6, 0, 6 + flare);
+  grad.addColorStop(0, '#ffe6a0');
+  grad.addColorStop(1, 'rgba(255,120,0,0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.moveTo(-3, 6);
+  ctx.lineTo(3, 6);
+  ctx.lineTo(0, 6 + flare);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = '#e8eef7';
+  ctx.beginPath();
+  ctx.moveTo(0, -9);
+  ctx.lineTo(3.2, 0);
+  ctx.lineTo(3.2, 6);
+  ctx.lineTo(-3.2, 6);
+  ctx.lineTo(-3.2, 0);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = '#ff5b4a';
+  ctx.beginPath();
+  ctx.moveTo(0, -9);
+  ctx.lineTo(2, -3);
+  ctx.lineTo(-2, -3);
+  ctx.closePath();
+  ctx.fill();
+
+  // Fins.
+  ctx.fillStyle = '#9fb3cc';
+  ctx.fillRect(-5, 3, 2, 4);
+  ctx.fillRect(3, 3, 2, 4);
+
+  ctx.globalAlpha = 0.35 + Math.sin(trail * 20) * 0.1;
+  ctx.restore();
 }
 
 export function drawPickup(ctx: CanvasRenderingContext2D, pulse: number): void {

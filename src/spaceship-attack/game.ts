@@ -4,7 +4,8 @@ import {
   type Boss, type Bullet, type Enemy, type Explosion, type Pickup,
 } from './entities';
 import { FINAL_BOSS_TIER, bossDueAt, spawnBoss, updateBoss } from './bosses';
-import { createLoadout, upgradeFor, AMMO_PER_KILL, type Loadout } from './upgrades';
+import { createLoadout, upgradeFor, type Loadout } from './upgrades';
+import { moveMissile, spawnMissile, type Missile, type MissileTarget } from './missiles';
 import type { Mode } from './modes';
 import type { Input } from './input';
 import { skinFor, type Skin } from './skins';
@@ -16,11 +17,25 @@ const BOOST_FACTOR = 2.1;
 const BULLET_SPEED = 620;
 const ENEMY_BULLET_SPEED = 260;
 const ADVENTURE_TOP = VIEW_HEIGHT * 0.3;
-/** Ammo always drops from a kill, as a tight cluster of two or three crates. */
+/** Ammo drops as a tight cluster of two or three crates. */
 const PICKUP_CLUSTER_MIN = 2;
 const PICKUP_CLUSTER_MAX = 3;
 const PICKUP_CLUSTER_SPREAD = 11;
-const PICKUP_AMMO = 8;
+
+/**
+ * Salvage dries up as a run goes on. Early kills nearly always drop a generous
+ * pile of ammo; by the time the decay is complete only one kill in five drops
+ * anything, and it is a small amount.
+ */
+const AMMO_DECAY_SECONDS = 480;
+const EARLY_DROP_CHANCE = 1;
+const LATE_DROP_CHANCE = 0.2;
+const EARLY_DROP_AMMO = 20;
+const LATE_DROP_AMMO = 6;
+
+/** Missiles hit for several times a bullet. */
+const MISSILE_DAMAGE_FACTOR = 4;
+const MISSILE_BLAST_RADIUS = 26;
 /** Repairing spends this share of the full magazine and refills the hull. */
 export const HEAL_AMMO_SHARE = 0.2;
 
@@ -33,6 +48,7 @@ export interface GameState {
   readonly bullets: Bullet[];
   readonly enemies: Enemy[];
   readonly pickups: Pickup[];
+  readonly missiles: Missile[];
   readonly explosions: Explosion[];
   x: number;
   y: number;
@@ -42,7 +58,6 @@ export interface GameState {
   /** Metres flown, used for the distance readout and difficulty. */
   distance: number;
   upgradesEarned: number;
-  killsSinceUpgrade: number;
   shotsFired: number;
   boosting: boolean;
   /** Seconds of play so far, used to ramp up how many ships appear. */
@@ -52,6 +67,12 @@ export interface GameState {
   /** Counts up while the repair glow is showing. */
   healFlash: number;
   fireCooldown: number;
+  /** Shots used from the current burst. */
+  burstUsed: number;
+  /** Seconds left of the post-burst reload, 0 when ready. */
+  reloadLeft: number;
+  /** Seconds left before the next missile can launch. */
+  missileLeft: number;
   spawnTimer: number;
   hurtFlash: number;
 }
@@ -66,6 +87,7 @@ export function createGame(mode: Mode): GameState {
     bullets: [],
     enemies: [],
     pickups: [],
+    missiles: [],
     explosions: [],
     x: VIEW_WIDTH / 2,
     y: VIEW_HEIGHT - 90,
@@ -74,7 +96,6 @@ export function createGame(mode: Mode): GameState {
     score: 0,
     distance: 0,
     upgradesEarned: 0,
-    killsSinceUpgrade: 0,
     shotsFired: 0,
     boosting: false,
     elapsed: 0,
@@ -82,6 +103,9 @@ export function createGame(mode: Mode): GameState {
     over: false,
     healFlash: 0,
     fireCooldown: 0,
+    burstUsed: 0,
+    reloadLeft: 0,
+    missileLeft: 0,
     spawnTimer: 1,
     hurtFlash: 0,
   };
@@ -130,11 +154,19 @@ export function update(g: GameState, dt: number, input: Input, notify: Notify): 
   g.healFlash = Math.max(0, g.healFlash - dt);
   if (input.healPressed) heal(g, notify);
   g.fireCooldown = Math.max(0, g.fireCooldown - dt);
-  if (input.firePressed && g.fireCooldown === 0 && g.loadout.ammo > 0) fire(g, notify);
+  g.missileLeft = Math.max(0, g.missileLeft - dt);
+  if (g.reloadLeft > 0) {
+    g.reloadLeft = Math.max(0, g.reloadLeft - dt);
+    if (g.reloadLeft === 0) g.burstUsed = 0;
+  }
+  if (input.firePressed && canFire(g)) fire(g, notify);
+  if (input.missilePressed) launchMissile(g, notify);
 
   for (let i = g.bullets.length - 1; i >= 0; i--) {
     if (!moveBullet(g.bullets[i]!, dt)) g.bullets.splice(i, 1);
   }
+
+  updateMissiles(g, dt, notify);
 
   // Bosses arrive on a timer and pause the regular waves while they live.
   if (g.mode.enemies && !g.boss) {
@@ -277,27 +309,105 @@ function updateBossFight(g: GameState, dt: number, notify: Notify): void {
     });
   }
   g.loadout.ammo = g.loadout.maxAmmo;
+  g.burstUsed = 0;
+  g.reloadLeft = 0;
   grantUpgrade(g, notify);
   const skin = skinFor(g.bossesDefeated);
-  notify(`${boss.name} destroyed! New ship: ${skin.name}.`);
+  notify(`${boss.name} destroyed! Ammo refilled, ship is now ${skin.name}.`);
   if (g.bossesDefeated >= FINAL_BOSS_TIER) {
     g.won = true;
     notify('The fleet is broken. You win!');
   }
 }
 
+/** The gun is ready when it is not reloading and not between shots in a burst. */
+export function canFire(g: GameState): boolean {
+  return g.reloadLeft === 0 && g.fireCooldown === 0 && g.loadout.ammo > 0;
+}
+
+/** Shots left in the current burst before the gun has to cool down. */
+export function burstLeft(g: GameState): number {
+  return Math.max(0, g.loadout.burstSize - g.burstUsed);
+}
+
 function fire(g: GameState, notify: Notify): void {
   g.fireCooldown = g.loadout.fireDelay;
   g.loadout.ammo -= 1;
   g.shotsFired += 1;
+  g.burstUsed += 1;
+  if (g.burstUsed >= g.loadout.burstSize) g.reloadLeft = g.loadout.reloadSeconds;
   // Extra cannons fire straight up in close parallel lines, never fanned out.
   const offsets = g.loadout.guns === 1 ? [0] : g.loadout.guns === 2 ? [-4, 4] : [-7, 0, 7];
   const damage = g.loadout.damage + skinFor(g.bossesDefeated).damageBonus;
   for (const dx of offsets) {
     g.bullets.push({ x: g.x + dx, y: g.y - 18, vx: 0, vy: -BULLET_SPEED, damage, hostile: false });
   }
-  const per = g.mode.shotsPerUpgrade;
-  if (per !== null && g.shotsFired % per === 0) grantUpgrade(g, notify);
+}
+
+/** Homing missile on its own timer, independent of the gun. */
+function launchMissile(g: GameState, notify: Notify): void {
+  if (g.missileLeft > 0) {
+    notify(`Missile ready in ${Math.ceil(g.missileLeft)}s.`);
+    return;
+  }
+  g.missileLeft = g.loadout.missileCooldown;
+  g.missiles.push(spawnMissile(g.x, g.y - 18, shotDamage(g) * MISSILE_DAMAGE_FACTOR));
+}
+
+/** The enemy or boss nearest a point, for missile guidance. */
+export function nearestTarget(g: GameState, from: { x: number; y: number }): MissileTarget | null {
+  let best: MissileTarget | null = null;
+  let bestDist = Infinity;
+  const consider = (t: MissileTarget): void => {
+    const d = Math.hypot(t.x - from.x, t.y - from.y);
+    if (d < bestDist) {
+      bestDist = d;
+      best = t;
+    }
+  };
+  for (const e of g.enemies) consider(e);
+  if (g.boss && !g.boss.entering) consider(g.boss);
+  return best;
+}
+
+function updateMissiles(g: GameState, dt: number, notify: Notify): void {
+  for (let i = g.missiles.length - 1; i >= 0; i--) {
+    const m = g.missiles[i]!;
+    const target = nearestTarget(g, m);
+    if (!moveMissile(m, dt, target)) {
+      g.missiles.splice(i, 1);
+      continue;
+    }
+    if (!target) continue;
+    if (Math.hypot(target.x - m.x, target.y - m.y) > target.radius + 6) continue;
+
+    // Detonate: full damage to what it struck, half to anything else close by.
+    g.explosions.push({ x: m.x, y: m.y, life: 0.4, maxLife: 0.4, size: MISSILE_BLAST_RADIUS * 1.6 });
+    if (g.boss && target === g.boss) {
+      g.boss.hp -= m.damage;
+    } else {
+      hurtEnemy(g, target as Enemy, m.damage, notify);
+    }
+    const splash = Math.ceil(m.damage / 2);
+    for (let e = g.enemies.length - 1; e >= 0; e--) {
+      const enemy = g.enemies[e]!;
+      if (enemy === target) continue;
+      if (Math.hypot(enemy.x - m.x, enemy.y - m.y) <= MISSILE_BLAST_RADIUS + enemy.radius) {
+        hurtEnemy(g, enemy, splash, notify);
+      }
+    }
+    g.missiles.splice(i, 1);
+  }
+}
+
+/** Takes hit points off an enemy, scoring the kill and removing it if it dies. */
+function hurtEnemy(g: GameState, enemy: Enemy, amount: number, notify: Notify): void {
+  const index = g.enemies.indexOf(enemy);
+  if (index === -1) return;
+  enemy.hp -= amount;
+  if (enemy.hp > 0) return;
+  awardKill(g, enemy, notify);
+  g.enemies.splice(index, 1);
 }
 
 /** Heal ability: spends a fifth of the full magazine to restore the hull to full. */
@@ -327,24 +437,34 @@ function awardKill(g: GameState, e: Enemy, notify: Notify): void {
   g.kills += 1;
   g.score += e.scoreValue * 10;
   g.explosions.push({ x: e.x, y: e.y, life: 0.45, maxLife: 0.45, size: e.radius * 2.4 });
-  g.loadout.ammo = Math.min(g.loadout.maxAmmo, g.loadout.ammo + AMMO_PER_KILL);
-  dropAmmoCluster(g, e.x, e.y);
-  // A 40% chance per kill, plus a guaranteed one every fifth kill so a run of
-  // bad luck cannot leave the ship un-upgraded.
-  g.killsSinceUpgrade += 1;
-  const guaranteed = g.killsSinceUpgrade >= g.mode.killsPerGuaranteedUpgrade;
-  if (guaranteed || Math.random() < g.mode.upgradeChance) grantUpgrade(g, notify);
+  // Upgrades come only from bosses now, so a kill just maybe drops ammo.
+  if (Math.random() < ammoDropChance(g)) dropAmmoCluster(g, e.x, e.y);
+}
+
+/** Chance a kill drops ammo at all, falling from certain to one in five. */
+export function ammoDropChance(g: GameState): number {
+  const t = Math.min(1, g.elapsed / AMMO_DECAY_SECONDS);
+  return EARLY_DROP_CHANCE + (LATE_DROP_CHANCE - EARLY_DROP_CHANCE) * t;
+}
+
+/** Ammo in a drop, falling as the run goes on. */
+export function ammoDropAmount(g: GameState): number {
+  const t = Math.min(1, g.elapsed / AMMO_DECAY_SECONDS);
+  return Math.round(EARLY_DROP_AMMO + (LATE_DROP_AMMO - EARLY_DROP_AMMO) * t);
 }
 
 /** Two or three ammo crates that fall together, close enough to scoop up in one pass. */
 function dropAmmoCluster(g: GameState, x: number, y: number): void {
   const count = PICKUP_CLUSTER_MIN + Math.floor(Math.random() * (PICKUP_CLUSTER_MAX - PICKUP_CLUSTER_MIN + 1));
   const fall = 90 + Math.random() * 20;
+  const total = ammoDropAmount(g);
   for (let i = 0; i < count; i++) {
     const centred = count === 1 ? 0 : i / (count - 1) - 0.5;
+    // The cluster shares the drop between its crates, biggest first.
+    const share = i === 0 ? total - Math.floor(total / count) * (count - 1) : Math.floor(total / count);
     g.pickups.push({
       kind: 'ammo',
-      amount: PICKUP_AMMO,
+      amount: Math.max(1, share),
       x: clamp(x + centred * PICKUP_CLUSTER_SPREAD * 2, 12, VIEW_WIDTH - 12),
       y: y + centred * 6,
       vy: fall,
@@ -354,7 +474,6 @@ function dropAmmoCluster(g: GameState, x: number, y: number): void {
 }
 
 export function grantUpgrade(g: GameState, notify: Notify): void {
-  g.killsSinceUpgrade = 0;
   const upgrade = upgradeFor(g.upgradesEarned);
   upgrade.apply(g.loadout);
   g.upgradesEarned += 1;
