@@ -1,9 +1,10 @@
 import { installUpdateBanner } from '../shared/update-banner';
 import { chooseMode } from './modes';
+import { bossDueAt, bossKind } from './bosses';
 import { installHomeButton } from '../shared/home-button';
 import { Input } from './input';
 import { Starfield } from './starfield';
-import { createGame, currentSkin, update } from './game';
+import { createGame, currentSkin, grantUpgrade, shotDamage, update } from './game';
 import { draw, fitCanvas } from './render';
 
 installUpdateBanner();
@@ -79,6 +80,10 @@ if (import.meta.env.DEV) {
     // Advance one fixed step, for scripted tests.
     __step: () => update(game, 1 / 60, input, notify),
     __skin: () => currentSkin(game).name,
+    __grantUpgrade: () => grantUpgrade(game, notify),
+    __shotDamage: () => shotDamage(game),
+    __bossHp: (tier: number) => bossKind(tier).hp,
+    __bossDueAt: (tier: number, kpm: number) => bossDueAt(tier, kpm),
     __fire: () => { input.forceFire(); update(game, 1 / 60, input, notify); input.endFrame(); },
   });
 }

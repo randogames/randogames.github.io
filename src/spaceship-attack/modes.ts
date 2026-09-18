@@ -11,6 +11,8 @@ export interface Mode extends ModeOption {
   readonly maxAmmo: number;
   /** Chance from 0 to 1 that a kill drops an upgrade. */
   readonly upgradeChance: number;
+  /** A guaranteed upgrade after this many kills, whatever the dice say. */
+  readonly killsPerGuaranteedUpgrade: number;
   /** In creative mode there is nothing to kill, so shots earn the upgrades instead. */
   readonly shotsPerUpgrade: number | null;
 }
@@ -19,13 +21,14 @@ export const MODES: readonly Mode[] = [
   {
     id: 'adventure',
     name: 'Adventure',
-    description: 'Enemy ships attack from above. You take damage, and ships you shoot down drop ammo, sometimes with an upgrade.',
+    description: 'Enemy ships attack from above and a boss arrives every few minutes. Kills drop ammo, with a 40% chance of an upgrade and a guaranteed one every five kills.',
     invulnerable: false,
     enemies: true,
     enemiesAttack: true,
     startAmmo: 80,
     maxAmmo: 160,
-    upgradeChance: 0.2,
+    upgradeChance: 0.4,
+    killsPerGuaranteedUpgrade: 5,
     shotsPerUpgrade: null,
   },
   {
@@ -37,7 +40,8 @@ export const MODES: readonly Mode[] = [
     enemiesAttack: false,
     startAmmo: 400,
     maxAmmo: 400,
-    upgradeChance: 0.2,
+    upgradeChance: 0.4,
+    killsPerGuaranteedUpgrade: 5,
     shotsPerUpgrade: 8,
   },
 ];

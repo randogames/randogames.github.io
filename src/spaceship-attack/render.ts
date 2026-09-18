@@ -2,7 +2,7 @@ import { VIEW_HEIGHT, VIEW_WIDTH } from './world';
 import { MAX_HULL } from './entities';
 import { HEAL_AMMO_SHARE } from './game';
 import { drawBoss, drawBullet, drawEnemy, drawPickup, drawPlayer } from './sprites';
-import { currentSkin } from './game';
+import { currentSkin, secondsToNextBoss } from './game';
 import type { Starfield } from './starfield';
 import type { GameState } from './game';
 
@@ -147,5 +147,15 @@ function drawHud(ctx: CanvasRenderingContext2D, g: GameState): void {
   ctx.fillText(`${g.mode.name} mode   ${currentSkin(g).name}`, VIEW_WIDTH - 12, 12);
   ctx.fillText(`Score ${g.score}   Kills ${g.kills}`, VIEW_WIDTH - 12, 30);
   ctx.fillText(`${Math.round(g.distance)} m${g.boosting ? '   BOOST' : ''}`, VIEW_WIDTH - 12, 48);
+  if (!g.boss) {
+    const wait = secondsToNextBoss(g);
+    ctx.fillStyle = 'rgba(238,243,248,.7)';
+    ctx.fillText(
+      wait === null ? 'All bosses beaten' : `Next boss in ${Math.ceil(wait)}s`,
+      VIEW_WIDTH - 12,
+      66,
+    );
+    ctx.fillStyle = '#eef3f8';
+  }
   ctx.textAlign = 'left';
 }

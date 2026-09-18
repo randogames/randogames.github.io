@@ -41,13 +41,16 @@ log('shots to kill each enemy type:', await page.evaluate(() => {
 }));
 
 // Boss HP in plain bullets, plus skin unlocks and the win at the fifth boss.
+log('boss arrival schedule (seconds, by kill rate):', await page.evaluate(() =>
+  [0, 18, 30].map((kpm) => ({ killsPerMinute: kpm, due: [1, 2, 3, 4, 5].map((t) => Math.round(window.__bossDueAt(t, kpm))) }))));
 log('boss progression:', await page.evaluate(() => {
   const g = window.game;
   const rows = [];
   g.over = false; g.won = false; g.hull = 100; g.bossesDefeated = 0; g.score = 0;
   g.enemies.length = 0; g.bullets.length = 0; g.pickups.length = 0;
   for (let tier = 1; tier <= 5; tier++) {
-    g.score = 5000 * tier;
+    // Bosses are on a timer now, so wind the clock past the next one's due time.
+    g.elapsed = window.__bossDueAt(tier, 0) + 1;
     window.__step();
     if (!g.boss) { rows.push({ tier, error: 'no boss spawned' }); continue; }
     const declaredHp = g.boss.maxHp;
@@ -75,7 +78,7 @@ await page.close();
 
 // Boss visuals
 page = await open('adventure');
-await page.evaluate(() => { const g = window.game; g.score = 5000; window.__step(); });
+await page.evaluate(() => { const g = window.game; g.elapsed = window.__bossDueAt(1, 0) + 1; window.__step(); });
 await page.waitForTimeout(2500);
 log('boss on screen:', await page.evaluate(() => window.game.boss?.name ?? 'none'));
 await page.screenshot({ path: 'playtest-out/sa6-boss.png' });

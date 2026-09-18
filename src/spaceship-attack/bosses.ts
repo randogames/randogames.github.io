@@ -1,10 +1,30 @@
 import { VIEW_WIDTH, clamp } from './world';
 import { spawnEnemy, type Boss, type Bullet, type Enemy } from './entities';
 
-/** A boss arrives every 5000 points; beating the fifth one wins the game. */
-export const BOSS_SCORE_STEP = 5000;
 export const FINAL_BOSS_TIER = 5;
-export const WIN_SCORE = BOSS_SCORE_STEP * FINAL_BOSS_TIER;
+
+/** The first boss shows up around here, then roughly every four minutes. */
+const FIRST_BOSS_SECONDS = 90;
+const BOSS_INTERVAL_SECONDS = 240;
+/** How much doing well or badly can shift a boss's arrival. */
+const PACE_SWING_SECONDS = 30;
+const FAST_KILLS_PER_MINUTE = 26;
+const SLOW_KILLS_PER_MINUTE = 10;
+
+/**
+ * When the next boss is due, in seconds of play. A player racking up kills
+ * quickly meets it sooner; someone struggling gets extra time.
+ */
+export function bossDueAt(tier: number, killsPerMinute: number): number {
+  const base = FIRST_BOSS_SECONDS + (tier - 1) * BOSS_INTERVAL_SECONDS;
+  const pace = clamp(
+    (killsPerMinute - SLOW_KILLS_PER_MINUTE) / (FAST_KILLS_PER_MINUTE - SLOW_KILLS_PER_MINUTE),
+    0,
+    1,
+  );
+  // pace 1 (doing well) pulls the boss earlier, pace 0 pushes it later.
+  return base + (0.5 - pace) * 2 * PACE_SWING_SECONDS;
+}
 
 interface BossKind {
   readonly name: string;

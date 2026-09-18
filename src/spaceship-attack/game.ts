@@ -3,7 +3,7 @@ import {
   MAX_HULL, PLAYER_RADIUS, hits, moveBullet, moveEnemy, movePickup, spawnEnemy,
   type Boss, type Bullet, type Enemy, type Explosion, type Pickup,
 } from './entities';
-import { BOSS_SCORE_STEP, FINAL_BOSS_TIER, spawnBoss, updateBoss } from './bosses';
+import { FINAL_BOSS_TIER, bossDueAt, spawnBoss, updateBoss } from './bosses';
 import { createLoadout, upgradeFor, AMMO_PER_KILL, type Loadout } from './upgrades';
 import type { Mode } from './modes';
 import type { Input } from './input';
@@ -42,6 +42,7 @@ export interface GameState {
   /** Metres flown, used for the distance readout and difficulty. */
   distance: number;
   upgradesEarned: number;
+  killsSinceUpgrade: number;
   shotsFired: number;
   boosting: boolean;
   /** Seconds of play so far, used to ramp up how many ships appear. */
@@ -73,6 +74,7 @@ export function createGame(mode: Mode): GameState {
     score: 0,
     distance: 0,
     upgradesEarned: 0,
+    killsSinceUpgrade: 0,
     shotsFired: 0,
     boosting: false,
     elapsed: 0,
@@ -86,6 +88,18 @@ export function createGame(mode: Mode): GameState {
 }
 
 export type Notify = (message: string) => void;
+
+/** Kill rate so far, used to pace the boss arrivals. */
+export function killsPerMinute(g: GameState): number {
+  return g.elapsed > 5 ? (g.kills / g.elapsed) * 60 : 0;
+}
+
+/** Seconds until the next boss shows up, or null once all five are beaten. */
+export function secondsToNextBoss(g: GameState): number | null {
+  const nextTier = g.bossesDefeated + 1;
+  if (nextTier > FINAL_BOSS_TIER) return null;
+  return Math.max(0, bossDueAt(nextTier, killsPerMinute(g)) - g.elapsed);
+}
 
 /** The ship skin earned so far. Each boss beaten unlocks the next one. */
 export function currentSkin(g: GameState): Skin {
@@ -122,10 +136,10 @@ export function update(g: GameState, dt: number, input: Input, notify: Notify): 
     if (!moveBullet(g.bullets[i]!, dt)) g.bullets.splice(i, 1);
   }
 
-  // Bosses arrive every 5000 points and pause the regular waves while they live.
+  // Bosses arrive on a timer and pause the regular waves while they live.
   if (g.mode.enemies && !g.boss) {
     const nextTier = g.bossesDefeated + 1;
-    if (nextTier <= FINAL_BOSS_TIER && g.score >= BOSS_SCORE_STEP * nextTier) {
+    if (nextTier <= FINAL_BOSS_TIER && g.elapsed >= bossDueAt(nextTier, killsPerMinute(g))) {
       g.boss = spawnBoss(nextTier);
       notify(`${g.boss.name} incoming!`);
     }
@@ -315,7 +329,11 @@ function awardKill(g: GameState, e: Enemy, notify: Notify): void {
   g.explosions.push({ x: e.x, y: e.y, life: 0.45, maxLife: 0.45, size: e.radius * 2.4 });
   g.loadout.ammo = Math.min(g.loadout.maxAmmo, g.loadout.ammo + AMMO_PER_KILL);
   dropAmmoCluster(g, e.x, e.y);
-  if (Math.random() < g.mode.upgradeChance) grantUpgrade(g, notify);
+  // A 40% chance per kill, plus a guaranteed one every fifth kill so a run of
+  // bad luck cannot leave the ship un-upgraded.
+  g.killsSinceUpgrade += 1;
+  const guaranteed = g.killsSinceUpgrade >= g.mode.killsPerGuaranteedUpgrade;
+  if (guaranteed || Math.random() < g.mode.upgradeChance) grantUpgrade(g, notify);
 }
 
 /** Two or three ammo crates that fall together, close enough to scoop up in one pass. */
@@ -335,7 +353,8 @@ function dropAmmoCluster(g: GameState, x: number, y: number): void {
   }
 }
 
-function grantUpgrade(g: GameState, notify: Notify): void {
+export function grantUpgrade(g: GameState, notify: Notify): void {
+  g.killsSinceUpgrade = 0;
   const upgrade = upgradeFor(g.upgradesEarned);
   upgrade.apply(g.loadout);
   g.upgradesEarned += 1;

@@ -9,7 +9,11 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "playtest": "node scripts/playtest.mjs",
-    "reloadtest": "node scripts/reloadtest.mjs"
+    "reloadtest": "node scripts/reloadtest.mjs",
+    "playtest:spaceship": "node scripts/playtest-spaceship.mjs",
+    "playtest:bosses": "node scripts/playtest-bosses.mjs",
+    "playtest:creative": "node scripts/playtest-creative.mjs",
+    "balance": "node scripts/balance-report.mjs"
   },
   "devDependencies": {
     "@types/three": "^0.186.0",

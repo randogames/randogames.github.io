@@ -14,20 +14,28 @@ export interface Upgrade {
   readonly apply: (l: Loadout) => void;
 }
 
+const AMMO_CAP = 400;
+
+function addAmmo(l: Loadout, amount: number): void {
+  l.maxAmmo = Math.min(AMMO_CAP, l.maxAmmo + amount);
+  l.ammo = Math.min(l.maxAmmo, l.ammo + amount);
+}
+
 /**
- * Awarded in order; once the list runs out the last one repeats.
- * Every shot is a deliberate press, so upgrades make each press count for more
- * rather than making the gun fire faster.
+ * Awarded in order. Damage only rises on the listed steps, and the repeating
+ * tail hands out ammo rather than more damage, so a long run cannot turn the
+ * ship into a one-press boss killer.
  */
 export const UPGRADES: readonly Upgrade[] = [
   { name: 'Twin cannons', apply: (l) => { l.guns = 2; } },
   { name: 'Heavier rounds', apply: (l) => { l.damage += 1; } },
-  { name: 'Bigger magazine', apply: (l) => { l.maxAmmo += 40; l.ammo += 40; } },
+  { name: 'Bigger magazine', apply: (l) => { addAmmo(l, 40); } },
   { name: 'Triple cannons', apply: (l) => { l.guns = 3; } },
-  { name: 'Heavier rounds II', apply: (l) => { l.damage += 2; } },
-  { name: 'Reinforced rounds', apply: (l) => { l.damage += 2; } },
-  { name: 'Bigger magazine II', apply: (l) => { l.maxAmmo += 60; l.ammo += 60; } },
-  { name: 'Heavier rounds III', apply: (l) => { l.damage += 3; } },
+  { name: 'Heavier rounds II', apply: (l) => { l.damage += 1; } },
+  { name: 'Bigger magazine II', apply: (l) => { addAmmo(l, 50); } },
+  { name: 'Heavier rounds III', apply: (l) => { l.damage += 1; } },
+  // Repeats from here on.
+  { name: 'Ammo resupply', apply: (l) => { addAmmo(l, 40); } },
 ];
 
 export const AMMO_PER_KILL = 14;

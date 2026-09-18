@@ -77,27 +77,34 @@ log('after fighting', { kills: fought.kills, upgrades: fought.upgrades, guns: fo
 // Upgrades are a 20% chance per kill, and ammo drops in tight clusters of 2-3.
 const drops = await page.evaluate(() => {
   const g = window.game;
+  g.over = false; g.won = false; g.hull = 100; g.boss = null;
   g.pickups.length = 0;
   g.upgradesEarned = 0;
+  g.killsSinceUpgrade = 0;
   let upgrades = 0;
+  let drought = 0;
+  let longestDrought = 0;
   const spreads = [];
   const counts = [];
   for (let i = 0; i < 400; i++) {
     const before = g.upgradesEarned;
     g.pickups.length = 0;
+    g.enemies.length = 0;
     g.enemies.push({ shape: 'scout', x: 240, y: 300, radius: 13, hp: 1, scoreValue: 1, vx: 0, vy: 0, fireTimer: 99, spin: 0, spinRate: 0 });
     g.bullets.push({ x: 240, y: 300, vx: 0, vy: 0, damage: 99, hostile: false });
     window.__step();
-    if (g.upgradesEarned > before) upgrades++;
+    if (g.upgradesEarned > before) { upgrades++; drought = 0; }
+    else { drought++; longestDrought = Math.max(longestDrought, drought); }
     if (g.pickups.length) {
       counts.push(g.pickups.length);
       const xs = g.pickups.map((p) => p.x);
       spreads.push(Math.max(...xs) - Math.min(...xs));
     }
   }
-  return { upgrades, trials: 400, counts: [...new Set(counts)].sort(), maxSpread: Math.max(...spreads) };
+  return { upgrades, trials: 400, counts: [...new Set(counts)].sort(), maxSpread: Math.max(...spreads), longestDrought };
 });
-log('upgrade rate over', drops.trials, 'kills:', (drops.upgrades / drops.trials * 100).toFixed(1) + '% (target 20%)');
+log('upgrade rate over', drops.trials, 'kills:', (drops.upgrades / drops.trials * 100).toFixed(1) + '% (target: 40% plus a guarantee every 5th kill)');
+log('longest run of kills with no upgrade:', drops.longestDrought, '(should be at most 5)');
 log('ammo crates per kill:', JSON.stringify(drops.counts), 'widest gap between crates:', drops.maxSpread.toFixed(0), 'px');
 log('messages:', await page.$$eval('.msg', (n) => n.map((e) => e.textContent)));
 await page.screenshot({ path: 'playtest-out/sa3-upgraded.png' });
