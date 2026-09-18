@@ -23,6 +23,20 @@ export interface Enemy extends Vec2 {
   spinRate: number;
 }
 
+export interface Boss extends Vec2 {
+  readonly tier: number;
+  readonly name: string;
+  readonly maxHp: number;
+  readonly radius: number;
+  readonly color: string;
+  readonly scoreValue: number;
+  hp: number;
+  vx: number;
+  phase: number;
+  fireTimer: number;
+  entering: boolean;
+}
+
 export interface Pickup extends Vec2 {
   readonly kind: 'ammo';
   readonly amount: number;
@@ -36,10 +50,14 @@ export interface Explosion extends Vec2 {
   readonly size: number;
 }
 
+/**
+ * Hit points are shot counts with the starting cannon: purple scouts take two,
+ * red brutes take three, and teal darters go down in one.
+ */
 const ENEMY_TYPES: Record<EnemyShape, { hp: number; radius: number; speed: number; fireEvery: number; score: number }> = {
-  scout: { hp: 2, radius: 13, speed: 70, fireEvery: 2.2, score: 1 },
-  brute: { hp: 6, radius: 19, speed: 42, fireEvery: 1.7, score: 3 },
-  darter: { hp: 2, radius: 11, speed: 130, fireEvery: 3.2, score: 2 },
+  scout: { hp: 2, radius: 13, speed: 70, fireEvery: 2.2, score: 50 },
+  brute: { hp: 3, radius: 19, speed: 42, fireEvery: 1.7, score: 150 },
+  darter: { hp: 1, radius: 11, speed: 130, fireEvery: 3.2, score: 80 },
 };
 
 export function spawnEnemy(difficulty: number): Enemy {
@@ -51,7 +69,8 @@ export function spawnEnemy(difficulty: number): Enemy {
     x: 30 + Math.random() * (VIEW_WIDTH - 60),
     y: -30,
     radius: type.radius,
-    hp: type.hp + Math.floor(difficulty / 3),
+    // Shot counts stay fixed; difficulty adds more ships, not tougher ones.
+    hp: type.hp,
     scoreValue: type.score,
     vx: (Math.random() - 0.5) * 50,
     vy: type.speed * (1 + difficulty * 0.04),

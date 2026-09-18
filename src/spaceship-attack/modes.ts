@@ -3,8 +3,10 @@ import { modePickerElement, pickMode, type ModeOption } from '../shared/mode-pic
 export interface Mode extends ModeOption {
   /** Creative mode ignores all damage. */
   readonly invulnerable: boolean;
-  /** Adventure mode sends waves of enemy ships. */
+  /** Enemy ships and bosses appear in both modes. */
   readonly enemies: boolean;
+  /** Whether enemies shoot back and ramming hurts. */
+  readonly enemiesAttack: boolean;
   readonly startAmmo: number;
   readonly maxAmmo: number;
   /** Chance from 0 to 1 that a kill drops an upgrade. */
@@ -20,6 +22,7 @@ export const MODES: readonly Mode[] = [
     description: 'Enemy ships attack from above. You take damage, and ships you shoot down drop ammo, sometimes with an upgrade.',
     invulnerable: false,
     enemies: true,
+    enemiesAttack: true,
     startAmmo: 80,
     maxAmmo: 160,
     upgradeChance: 0.2,
@@ -28,9 +31,10 @@ export const MODES: readonly Mode[] = [
   {
     id: 'creative',
     name: 'Creative',
-    description: 'Fly anywhere and take no damage. Nothing attacks you, and shooting earns upgrades so you can try every weapon.',
+    description: 'Enemy ships still come, but nothing can hurt you. Fly anywhere, and shooting earns upgrades so you can try every weapon.',
     invulnerable: true,
-    enemies: false,
+    enemies: true,
+    enemiesAttack: false,
     startAmmo: 400,
     maxAmmo: 400,
     upgradeChance: 0.2,

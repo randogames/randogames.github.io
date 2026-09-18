@@ -1,6 +1,7 @@
 /** Canvas drawing for every ship and effect. All shapes are centred on (0, 0). */
+import type { Skin } from './skins';
 
-export function drawPlayer(ctx: CanvasRenderingContext2D, boosting: boolean, tilt: number): void {
+export function drawPlayer(ctx: CanvasRenderingContext2D, boosting: boolean, tilt: number, skin: Skin, tier: number): void {
   ctx.save();
   ctx.rotate(tilt * 0.25);
 
@@ -17,23 +18,38 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, boosting: boolean, til
   ctx.closePath();
   ctx.fill();
 
-  // Wings.
-  ctx.fillStyle = '#3f7fd0';
+  // Wings grow wider and more swept with each skin.
+  const span = 18 + tier * 2.2;
+  ctx.fillStyle = skin.accent;
   ctx.beginPath();
-  ctx.moveTo(-18, 14);
-  ctx.lineTo(-4, 2);
+  ctx.moveTo(-span, 14);
+  ctx.lineTo(-4, 2 - tier);
   ctx.lineTo(-4, 14);
   ctx.closePath();
-  ctx.moveTo(18, 14);
-  ctx.lineTo(4, 2);
+  ctx.moveTo(span, 14);
+  ctx.lineTo(4, 2 - tier);
   ctx.lineTo(4, 14);
   ctx.closePath();
   ctx.fill();
 
+  // Extra canards once the ship is well upgraded.
+  if (tier >= 3) {
+    ctx.beginPath();
+    ctx.moveTo(-span * 0.55, -6);
+    ctx.lineTo(-6, -12);
+    ctx.lineTo(-6, -2);
+    ctx.closePath();
+    ctx.moveTo(span * 0.55, -6);
+    ctx.lineTo(6, -12);
+    ctx.lineTo(6, -2);
+    ctx.closePath();
+    ctx.fill();
+  }
+
   // Hull.
-  ctx.fillStyle = '#dde7f5';
+  ctx.fillStyle = skin.hull;
   ctx.beginPath();
-  ctx.moveTo(0, -20);
+  ctx.moveTo(0, -20 - tier);
   ctx.lineTo(9, 10);
   ctx.lineTo(0, 15);
   ctx.lineTo(-9, 10);
@@ -41,10 +57,18 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, boosting: boolean, til
   ctx.fill();
 
   // Cockpit.
-  ctx.fillStyle = '#2b6cb0';
+  ctx.fillStyle = skin.cockpit;
   ctx.beginPath();
   ctx.ellipse(0, -4, 4, 7, 0, 0, Math.PI * 2);
   ctx.fill();
+
+  if (tier >= 5) {
+    ctx.strokeStyle = skin.bulletGlow;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, 22, 0, Math.PI * 2);
+    ctx.stroke();
+  }
   ctx.restore();
 }
 
@@ -96,13 +120,125 @@ export function drawEnemy(ctx: CanvasRenderingContext2D, shape: EnemyShape, spin
   ctx.restore();
 }
 
-export function drawBullet(ctx: CanvasRenderingContext2D, hostile: boolean): void {
-  ctx.fillStyle = hostile ? '#ffb347' : '#7ef9ff';
-  ctx.shadowColor = hostile ? '#ff6a00' : '#39d6ff';
-  ctx.shadowBlur = 8;
+/** Bosses: a big armoured hull whose silhouette changes with the tier. */
+export function drawBoss(
+  ctx: CanvasRenderingContext2D,
+  tier: number,
+  radius: number,
+  color: string,
+  phase: number,
+): void {
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.strokeStyle = 'rgba(255,255,255,.55)';
+  ctx.lineWidth = 2.5;
+
+  if (tier === 2 || tier === 4) ctx.rotate(Math.sin(phase * 0.6) * 0.12);
+
   ctx.beginPath();
-  ctx.ellipse(0, 0, 2.6, 7, 0, 0, Math.PI * 2);
+  if (tier === 1) {
+    ctx.moveTo(-radius, -radius * 0.3);
+    ctx.lineTo(0, radius * 0.75);
+    ctx.lineTo(radius, -radius * 0.3);
+    ctx.lineTo(radius * 0.5, -radius * 0.7);
+    ctx.lineTo(-radius * 0.5, -radius * 0.7);
+  } else if (tier === 2) {
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + Math.PI / 6;
+      ctx.lineTo(Math.cos(a) * radius, Math.sin(a) * radius * 0.8);
+    }
+  } else if (tier === 3) {
+    ctx.moveTo(0, radius);
+    ctx.lineTo(-radius * 0.8, -radius * 0.2);
+    ctx.lineTo(-radius * 0.3, -radius * 0.8);
+    ctx.lineTo(radius * 0.3, -radius * 0.8);
+    ctx.lineTo(radius * 0.8, -radius * 0.2);
+  } else if (tier === 4) {
+    ctx.rect(-radius, -radius * 0.6, radius * 2, radius * 1.2);
+  } else {
+    ctx.moveTo(0, radius);
+    ctx.lineTo(-radius * 0.55, radius * 0.35);
+    ctx.lineTo(-radius, -radius * 0.45);
+    ctx.lineTo(-radius * 0.4, -radius * 0.85);
+    ctx.lineTo(radius * 0.4, -radius * 0.85);
+    ctx.lineTo(radius, -radius * 0.45);
+    ctx.lineTo(radius * 0.55, radius * 0.35);
+  }
+  ctx.closePath();
   ctx.fill();
+  ctx.stroke();
+
+  // Glowing core, plus turret pods on the bigger hulls.
+  const pulse = 0.6 + Math.abs(Math.sin(phase * 3)) * 0.4;
+  ctx.fillStyle = `rgba(255, 91, 74, ${pulse})`;
+  ctx.beginPath();
+  ctx.arc(0, 0, radius * 0.24, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (tier >= 3) {
+    ctx.fillStyle = 'rgba(20,20,26,.9)';
+    for (const x of [-radius * 0.62, radius * 0.62]) {
+      ctx.beginPath();
+      ctx.arc(x, radius * 0.1, radius * 0.16, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+export function drawBullet(ctx: CanvasRenderingContext2D, hostile: boolean, skin: Skin): void {
+  if (hostile) {
+    ctx.fillStyle = '#ffb347';
+    ctx.shadowColor = '#ff6a00';
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 2.6, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    return;
+  }
+
+  ctx.fillStyle = skin.bullet;
+  ctx.strokeStyle = skin.bullet;
+  ctx.shadowColor = skin.bulletGlow;
+  ctx.shadowBlur = 10;
+  ctx.beginPath();
+  switch (skin.bulletShape) {
+    case 'bolt':
+      ctx.ellipse(0, 0, 2.6, 7, 0, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    case 'lance':
+      ctx.moveTo(0, -11);
+      ctx.lineTo(2.4, 5);
+      ctx.lineTo(0, 8);
+      ctx.lineTo(-2.4, 5);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    case 'orb':
+      ctx.arc(0, 0, 5, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    case 'wave':
+      ctx.lineWidth = 2.4;
+      ctx.moveTo(-5, 4);
+      ctx.quadraticCurveTo(0, -4, 5, 4);
+      ctx.stroke();
+      ctx.moveTo(-5, -3);
+      ctx.quadraticCurveTo(0, -11, 5, -3);
+      ctx.stroke();
+      break;
+    case 'star':
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        const r = i % 2 === 0 ? 7 : 3;
+        ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+      }
+      ctx.closePath();
+      ctx.fill();
+      break;
+  }
   ctx.shadowBlur = 0;
 }
 

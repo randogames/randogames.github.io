@@ -1,7 +1,8 @@
 import { VIEW_HEIGHT, VIEW_WIDTH } from './world';
 import { MAX_HULL } from './entities';
 import { HEAL_AMMO_SHARE } from './game';
-import { drawBullet, drawEnemy, drawPickup, drawPlayer } from './sprites';
+import { drawBoss, drawBullet, drawEnemy, drawPickup, drawPlayer } from './sprites';
+import { currentSkin } from './game';
 import type { Starfield } from './starfield';
 import type { GameState } from './game';
 
@@ -17,6 +18,7 @@ export function fitCanvas(canvas: HTMLCanvasElement): number {
 }
 
 export function draw(ctx: CanvasRenderingContext2D, scale: number, g: GameState, stars: Starfield): void {
+  const skin = currentSkin(g);
   ctx.setTransform(scale, 0, 0, scale, 0, 0);
   const sky = ctx.createLinearGradient(0, 0, 0, VIEW_HEIGHT);
   sky.addColorStop(0, '#0a1028');
@@ -36,7 +38,7 @@ export function draw(ctx: CanvasRenderingContext2D, scale: number, g: GameState,
   for (const b of g.bullets) {
     ctx.save();
     ctx.translate(b.x, b.y);
-    drawBullet(ctx, b.hostile);
+    drawBullet(ctx, b.hostile, skin);
     ctx.restore();
   }
 
@@ -47,11 +49,18 @@ export function draw(ctx: CanvasRenderingContext2D, scale: number, g: GameState,
     ctx.restore();
   }
 
+  if (g.boss) {
+    ctx.save();
+    ctx.translate(g.boss.x, g.boss.y);
+    drawBoss(ctx, g.boss.tier, g.boss.radius, g.boss.color, g.boss.phase);
+    ctx.restore();
+  }
+
   const blink = g.hurtFlash > 0 && Math.sin(g.hurtFlash * 60) < -0.3;
   if (!g.over && !blink) {
     ctx.save();
     ctx.translate(g.x, g.y);
-    drawPlayer(ctx, g.boosting, g.tilt);
+    drawPlayer(ctx, g.boosting, g.tilt, skin, g.bossesDefeated);
     ctx.restore();
   }
 
@@ -89,6 +98,27 @@ export function draw(ctx: CanvasRenderingContext2D, scale: number, g: GameState,
   }
 
   drawHud(ctx, g);
+  if (g.boss && !g.boss.entering) drawBossBar(ctx, g);
+}
+
+/** Boss name and health across the top of the screen. */
+function drawBossBar(ctx: CanvasRenderingContext2D, g: GameState): void {
+  const boss = g.boss;
+  if (!boss) return;
+  // Sits just under the stats, on the same side of the screen as the boss.
+  const width = VIEW_WIDTH - 80;
+  const barY = 122;
+  ctx.fillStyle = 'rgba(0,0,0,.45)';
+  ctx.fillRect(40, barY, width, 14);
+  ctx.fillStyle = boss.color;
+  ctx.fillRect(40, barY, width * (boss.hp / boss.maxHp), 14);
+  ctx.strokeStyle = 'rgba(255,255,255,.5)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(40, barY, width, 14);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#eef3f8';
+  ctx.fillText(`${boss.name}   ${Math.max(0, Math.ceil(boss.hp))} / ${boss.maxHp}`, VIEW_WIDTH / 2, barY + 18);
+  ctx.textAlign = 'left';
 }
 
 function drawHud(ctx: CanvasRenderingContext2D, g: GameState): void {
@@ -106,14 +136,15 @@ function drawHud(ctx: CanvasRenderingContext2D, g: GameState): void {
   ctx.fillStyle = g.loadout.ammo === 0 ? '#e53935' : '#eef3f8';
   ctx.fillText(`Ammo ${g.loadout.ammo}/${g.loadout.maxAmmo}`, 12, 46);
   ctx.fillStyle = '#eef3f8';
-  ctx.fillText(`Cannons ${g.loadout.guns}   Damage ${g.loadout.damage}`, 12, 64);
+  const skinBonus = currentSkin(g).damageBonus;
+  ctx.fillText(`Cannons ${g.loadout.guns}   Damage ${g.loadout.damage + skinBonus}`, 12, 64);
   const healCost = Math.ceil(g.loadout.maxAmmo * HEAL_AMMO_SHARE);
   ctx.fillStyle = g.hull < MAX_HULL && g.loadout.ammo >= healCost ? '#7dffb0' : 'rgba(238,243,248,.55)';
   ctx.fillText(`H repair: full hull for ${healCost} ammo`, 12, 82);
   ctx.fillStyle = '#eef3f8';
 
   ctx.textAlign = 'right';
-  ctx.fillText(`${g.mode.name} mode`, VIEW_WIDTH - 12, 12);
+  ctx.fillText(`${g.mode.name} mode   ${currentSkin(g).name}`, VIEW_WIDTH - 12, 12);
   ctx.fillText(`Score ${g.score}   Kills ${g.kills}`, VIEW_WIDTH - 12, 30);
   ctx.fillText(`${Math.round(g.distance)} m${g.boosting ? '   BOOST' : ''}`, VIEW_WIDTH - 12, 48);
   ctx.textAlign = 'left';

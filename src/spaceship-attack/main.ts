@@ -3,7 +3,7 @@ import { chooseMode } from './modes';
 import { installHomeButton } from '../shared/home-button';
 import { Input } from './input';
 import { Starfield } from './starfield';
-import { createGame, update } from './game';
+import { createGame, currentSkin, update } from './game';
 import { draw, fitCanvas } from './render';
 
 installUpdateBanner();
@@ -31,11 +31,13 @@ function notify(text: string): void {
 }
 
 const overlay = document.querySelector<HTMLElement>('#overlay');
-function showGameOver(score: number, kills: number, distance: number): void {
+function showEnding(won: boolean, score: number, kills: number, bosses: number): void {
   if (!overlay) return;
-  overlay.innerHTML =
-    `<h1>Shot down</h1><p>Score ${score} with ${kills} kills over ${Math.round(distance)} metres.</p>` +
-    `<p>Press R to fly again.</p>`;
+  overlay.innerHTML = won
+    ? `<h1>Fleet destroyed!</h1><p>You beat all ${bosses} bosses with a score of ${score}.</p>` +
+      `<p>Press R to fly again.</p>`
+    : `<h1>Shot down</h1><p>Score ${score} with ${kills} kills and ${bosses} bosses beaten.</p>` +
+      `<p>Press R to fly again.</p>`;
   overlay.style.display = 'flex';
 }
 
@@ -57,11 +59,11 @@ function frame(now: number): void {
   stars.update(dt, game.boosting ? 2.6 : 1);
   draw(ctx!, scale, game, stars);
 
-  if (game.over && !announced) {
+  if ((game.over || game.won) && !announced) {
     announced = true;
-    showGameOver(game.score, game.kills, game.distance);
+    showEnding(game.won, game.score, game.kills, game.bossesDefeated);
   }
-  if (game.over && input.wasPressed('KeyR')) location.reload();
+  if ((game.over || game.won) && input.wasPressed('KeyR')) location.reload();
 
   input.endFrame();
   requestAnimationFrame(frame);
@@ -76,5 +78,6 @@ if (import.meta.env.DEV) {
     stars,
     // Advance one fixed step, for scripted tests.
     __step: () => update(game, 1 / 60, input, notify),
+    __skin: () => currentSkin(game).name,
   });
 }

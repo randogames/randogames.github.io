@@ -1,11 +1,13 @@
 import { clamp, VIEW_HEIGHT, VIEW_WIDTH } from './world';
 import {
   MAX_HULL, PLAYER_RADIUS, hits, moveBullet, moveEnemy, movePickup, spawnEnemy,
-  type Bullet, type Enemy, type Explosion, type Pickup,
+  type Boss, type Bullet, type Enemy, type Explosion, type Pickup,
 } from './entities';
+import { BOSS_SCORE_STEP, FINAL_BOSS_TIER, spawnBoss, updateBoss } from './bosses';
 import { createLoadout, upgradeFor, AMMO_PER_KILL, type Loadout } from './upgrades';
 import type { Mode } from './modes';
 import type { Input } from './input';
+import { skinFor, type Skin } from './skins';
 
 const STRAFE_SPEED = 300;
 const CLIMB_SPEED = 220;
@@ -24,6 +26,9 @@ export const HEAL_AMMO_SHARE = 0.2;
 
 export interface GameState {
   readonly mode: Mode;
+  boss: Boss | null;
+  bossesDefeated: number;
+  won: boolean;
   readonly loadout: Loadout;
   readonly bullets: Bullet[];
   readonly enemies: Enemy[];
@@ -39,6 +44,8 @@ export interface GameState {
   upgradesEarned: number;
   shotsFired: number;
   boosting: boolean;
+  /** Seconds of play so far, used to ramp up how many ships appear. */
+  elapsed: number;
   tilt: number;
   over: boolean;
   /** Counts up while the repair glow is showing. */
@@ -51,6 +58,9 @@ export interface GameState {
 export function createGame(mode: Mode): GameState {
   return {
     mode,
+    boss: null,
+    bossesDefeated: 0,
+    won: false,
     loadout: createLoadout(mode.startAmmo, mode.maxAmmo),
     bullets: [],
     enemies: [],
@@ -65,6 +75,7 @@ export function createGame(mode: Mode): GameState {
     upgradesEarned: 0,
     shotsFired: 0,
     boosting: false,
+    elapsed: 0,
     tilt: 0,
     over: false,
     healFlash: 0,
@@ -76,9 +87,20 @@ export function createGame(mode: Mode): GameState {
 
 export type Notify = (message: string) => void;
 
+/** The ship skin earned so far. Each boss beaten unlocks the next one. */
+export function currentSkin(g: GameState): Skin {
+  return skinFor(g.bossesDefeated);
+}
+
+/** Damage a single bullet does right now, upgrades plus the skin bonus. */
+export function shotDamage(g: GameState): number {
+  return g.loadout.damage + currentSkin(g).damageBonus;
+}
+
 export function update(g: GameState, dt: number, input: Input, notify: Notify): void {
   if (g.over) return;
 
+  g.elapsed += dt;
   g.boosting = input.boosting;
   const boost = g.boosting ? BOOST_FACTOR : 1;
   g.distance += 40 * boost * dt;
@@ -100,14 +122,26 @@ export function update(g: GameState, dt: number, input: Input, notify: Notify): 
     if (!moveBullet(g.bullets[i]!, dt)) g.bullets.splice(i, 1);
   }
 
-  if (g.mode.enemies) {
-    g.spawnTimer -= dt;
-    if (g.spawnTimer <= 0) {
-      const difficulty = g.distance / 500;
-      g.spawnTimer = Math.max(0.35, 1.5 - difficulty * 0.06);
-      g.enemies.push(spawnEnemy(difficulty));
+  // Bosses arrive every 5000 points and pause the regular waves while they live.
+  if (g.mode.enemies && !g.boss) {
+    const nextTier = g.bossesDefeated + 1;
+    if (nextTier <= FINAL_BOSS_TIER && g.score >= BOSS_SCORE_STEP * nextTier) {
+      g.boss = spawnBoss(nextTier);
+      notify(`${g.boss.name} incoming!`);
     }
   }
+
+  if (g.mode.enemies && !g.boss) {
+    g.spawnTimer -= dt;
+    if (g.spawnTimer <= 0) {
+      // Few ships to begin with, then steadily more as the run goes on.
+      const minutes = g.elapsed / 60;
+      g.spawnTimer = Math.max(0.4, 2.6 - minutes * 0.55);
+      g.enemies.push(spawnEnemy(minutes));
+    }
+  }
+
+  if (g.boss) updateBossFight(g, dt, notify);
 
   for (let i = g.enemies.length - 1; i >= 0; i--) {
     const e = g.enemies[i]!;
@@ -115,7 +149,7 @@ export function update(g: GameState, dt: number, input: Input, notify: Notify): 
       g.enemies.splice(i, 1);
       continue;
     }
-    if (g.mode.enemies) {
+    if (g.mode.enemiesAttack) {
       e.fireTimer -= dt;
       if (e.fireTimer <= 0) {
         e.fireTimer = 1.4 + Math.random() * 1.8;
@@ -151,7 +185,7 @@ export function update(g: GameState, dt: number, input: Input, notify: Notify): 
     }
 
     // Ramming the player.
-    if (g.mode.enemies && hits(e, e.radius, g, PLAYER_RADIUS)) {
+    if (g.mode.enemiesAttack && hits(e, e.radius, g, PLAYER_RADIUS)) {
       damage(g, 20);
       g.explosions.push({ x: e.x, y: e.y, life: 0.5, maxLife: 0.5, size: e.radius * 2 });
       g.enemies.splice(i, 1);
@@ -186,9 +220,55 @@ export function update(g: GameState, dt: number, input: Input, notify: Notify): 
     if (x.life <= 0) g.explosions.splice(i, 1);
   }
 
+  if (g.won) return;
+
   if (g.hull <= 0 && !g.over) {
     g.over = true;
     g.explosions.push({ x: g.x, y: g.y, life: 0.8, maxLife: 0.8, size: 60 });
+  }
+}
+
+/** Boss movement, its attacks, and the player's shots landing on it. */
+function updateBossFight(g: GameState, dt: number, notify: Notify): void {
+  const boss = g.boss;
+  if (!boss) return;
+
+  const launched = updateBoss(boss, dt, { x: g.x, y: g.y }, g.mode.enemiesAttack);
+  g.bullets.push(...launched.bullets);
+  g.enemies.push(...launched.minions);
+
+  for (let b = g.bullets.length - 1; b >= 0; b--) {
+    const bullet = g.bullets[b]!;
+    if (bullet.hostile) continue;
+    if (!hits(bullet, 3, boss, boss.radius)) continue;
+    boss.hp -= bullet.damage;
+    g.bullets.splice(b, 1);
+    g.explosions.push({ x: bullet.x, y: bullet.y, life: 0.18, maxLife: 0.18, size: 14 });
+  }
+
+  if (g.mode.enemiesAttack && !boss.entering && hits(boss, boss.radius, g, PLAYER_RADIUS)) damage(g, 25);
+
+  if (boss.hp > 0) return;
+
+  g.score += boss.scoreValue;
+  g.bossesDefeated += 1;
+  g.boss = null;
+  for (let i = 0; i < 6; i++) {
+    g.explosions.push({
+      x: boss.x + (Math.random() - 0.5) * boss.radius * 1.5,
+      y: boss.y + (Math.random() - 0.5) * boss.radius * 1.5,
+      life: 0.5 + Math.random() * 0.5,
+      maxLife: 1,
+      size: boss.radius * 1.6,
+    });
+  }
+  g.loadout.ammo = g.loadout.maxAmmo;
+  grantUpgrade(g, notify);
+  const skin = skinFor(g.bossesDefeated);
+  notify(`${boss.name} destroyed! New ship: ${skin.name}.`);
+  if (g.bossesDefeated >= FINAL_BOSS_TIER) {
+    g.won = true;
+    notify('The fleet is broken. You win!');
   }
 }
 
@@ -198,6 +278,7 @@ function fire(g: GameState, notify: Notify): void {
   g.shotsFired += 1;
   const offsets = g.loadout.guns === 1 ? [0] : g.loadout.guns === 2 ? [-9, 9] : [-13, 0, 13];
   const spread = (g.loadout.spread * Math.PI) / 180;
+  const damage = g.loadout.damage + skinFor(g.bossesDefeated).damageBonus;
   offsets.forEach((dx, i) => {
     // Fan the volley out from the centre when the spread upgrade is earned.
     const centred = offsets.length === 1 ? 0 : i / (offsets.length - 1) - 0.5;
@@ -207,7 +288,7 @@ function fire(g: GameState, notify: Notify): void {
       y: g.y - 18,
       vx: Math.sin(angle) * BULLET_SPEED,
       vy: -Math.cos(angle) * BULLET_SPEED,
-      damage: g.loadout.damage,
+      damage,
       hostile: false,
     });
   });
