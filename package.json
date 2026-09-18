@@ -15,7 +15,8 @@
     "playtest:creative": "node scripts/playtest-creative.mjs",
     "balance": "node scripts/balance-report.mjs",
     "playtest:abilities": "node scripts/playtest-abilities.mjs",
-    "subpath-check": "node scripts/subpath-check.mjs"
+    "subpath-check": "node scripts/subpath-check.mjs",
+    "live-check": "node scripts/live-check.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.6.1",
